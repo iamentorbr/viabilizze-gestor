@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -152,12 +153,10 @@ export default function HistoricoPage() {
     <div className="flex min-h-screen bg-background">
       <AppSidebar />
       <main className="flex-1 overflow-auto">
-        <header className="border-b border-border bg-card px-6 py-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Histórico de Movimentações</h1>
-            <p className="text-sm text-muted-foreground">Registro de entradas, saídas e produções</p>
-          </div>
-        </header>
+        <PageHeader 
+          title="Histórico de Movimentações" 
+          description="Registro de entradas, saídas e produções"
+        />
         <div className="p-6 space-y-6">
           {/* Stats */}
           <div className="grid gap-4 sm:grid-cols-4">

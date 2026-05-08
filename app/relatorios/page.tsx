@@ -1,6 +1,7 @@
 "use client"
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart3, FileText, Download, TrendingUp, Factory, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -51,12 +52,10 @@ export default function RelatoriosPage() {
     <div className="flex min-h-screen bg-background">
       <AppSidebar />
       <main className="flex-1 overflow-auto">
-        <header className="border-b border-border bg-card px-6 py-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Relatórios e Análises</h1>
-            <p className="text-sm text-muted-foreground">Visualização de dados e indicadores</p>
-          </div>
-        </header>
+        <PageHeader 
+          title="Relatórios e Análises" 
+          description="Visualização de dados e indicadores"
+        />
         <div className="p-6 space-y-6">
           {/* Quick Reports */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

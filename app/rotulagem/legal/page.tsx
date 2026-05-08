@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/accordion"
 import { Scale, Building2, AlertTriangle, FileCheck, Save, FileDown, ShieldCheck } from "lucide-react"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
+import { useClient } from "@/contexts/client-context"
 
 interface InfoLegal {
   id: number
@@ -113,6 +115,7 @@ const alergenosDisponiveis = [
 ]
 
 export default function InformacoesLegaisPage() {
+  const { activeClient } = useClient()
   const [produtoSelecionado, setProdutoSelecionado] = useState<InfoLegal>(infosLegais[0])
   const [infoEditavel, setInfoEditavel] = useState<InfoLegal>(infosLegais[0])
 
@@ -141,7 +144,7 @@ export default function InformacoesLegaisPage() {
     const now = new Date().toLocaleDateString("pt-BR")
 
     // Cabeçalho com logo
-    let yL = await drawPdfHeader(doc, "Informações Legais do Rótulo — RDC 429/2020", now)
+    let yL = await drawPdfHeader(doc, "Informações Legais do Rótulo — RDC 429/2020", now, activeClient)
 
     // Título
     doc.setTextColor(0, 0, 0)
@@ -306,15 +309,10 @@ export default function InformacoesLegaisPage() {
     <div className="flex h-screen bg-background">
       <AppSidebar />
       <main className="flex-1 overflow-auto">
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Informações Legais</h1>
-              <p className="text-muted-foreground">
-                Gerencie informações obrigatórias conforme legislação ANVISA
-              </p>
-            </div>
+        <PageHeader 
+          title="Informações Legais" 
+          description="Gerencie informações obrigatórias conforme legislação ANVISA"
+          actions={
             <div className="flex gap-2">
               <Button variant="outline" className="gap-2" onClick={exportarPDF}>
                 <FileDown className="h-4 w-4" />
@@ -325,7 +323,9 @@ export default function InformacoesLegaisPage() {
                 Salvar
               </Button>
             </div>
-          </div>
+          }
+        />
+        <div className="p-6 space-y-6">
 
           {/* Seleção de Produto */}
           <Card className="bg-card border-border">

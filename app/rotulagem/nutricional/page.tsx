@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileText, Calculator, Save, FileDown } from "lucide-react"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
+import { useClient } from "@/contexts/client-context"
 
 interface InfoNutricional {
   nutriente: string
@@ -116,6 +118,7 @@ const produtosNutricionais: ProdutoNutricional[] = [
 ]
 
 export default function TabelaNutricionalPage() {
+  const { activeClient } = useClient()
   const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoNutricional>(produtosNutricionais[0])
   const [infosEditaveis, setInfosEditaveis] = useState<InfoNutricional[]>(produtosNutricionais[0].infos)
 
@@ -143,7 +146,7 @@ export default function TabelaNutricionalPage() {
     const now = new Date().toLocaleDateString("pt-BR")
 
     // Cabeçalho com logo
-    let yN = await drawPdfHeader(doc, "Tabela Nutricional — RDC 429/2020 ANVISA", now)
+    let yN = await drawPdfHeader(doc, "Tabela Nutricional — RDC 429/2020 ANVISA", now, activeClient)
 
     // Título do produto
     doc.setTextColor(0, 0, 0)
@@ -234,13 +237,10 @@ export default function TabelaNutricionalPage() {
     <div className="flex h-screen bg-background">
       <AppSidebar />
       <main className="flex-1 overflow-auto">
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Tabela Nutricional</h1>
-              <p className="text-muted-foreground">Gerencie as informações nutricionais dos produtos</p>
-            </div>
+        <PageHeader 
+          title="Tabela Nutricional" 
+          description="Gerencie as informações nutricionais dos produtos"
+          actions={
             <div className="flex gap-2">
               <Button variant="outline" className="gap-2" onClick={exportarPDF}>
                 <FileDown className="h-4 w-4" />
@@ -251,7 +251,9 @@ export default function TabelaNutricionalPage() {
                 Salvar Alterações
               </Button>
             </div>
-          </div>
+          }
+        />
+        <div className="p-6 space-y-6">
 
           {/* Seleção de Produto */}
           <Card className="bg-card border-border">

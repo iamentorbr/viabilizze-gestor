@@ -11,8 +11,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown } from "lucide-react"
 import { formulas, proporcoes, ingredientesRegistro } from "@/lib/formulation-data"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
+import { useClient } from "@/contexts/client-context"
 
 export function ProductionCalculator() {
+  const { activeClient } = useClient()
   const [selectedFruta, setSelectedFruta] = useState<string>(formulas[11].fruta) // Caju
   const [quantity, setQuantity] = useState<number>(25000)
   const [productionPercentage, setProductionPercentage] = useState<number>(80)
@@ -77,7 +79,7 @@ export function ProductionCalculator() {
     const now = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
 
     // ── Cabeçalho com logo ───────────────────────────────────────
-    let yPos = await drawPdfHeader(doc, "Calculadora de Formulação", now)
+    let yPos = await drawPdfHeader(doc, "Calculadora de Formulação", now, activeClient)
 
     // ── Título do produto ────────────────────────────────────────
     doc.setTextColor(0, 0, 0)

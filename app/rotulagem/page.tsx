@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,6 +36,7 @@ import {
 import { Plus, Eye, Edit2, Trash2, Tag, Search, FlaskConical, Info, FileText, FileDown } from "lucide-react"
 import { formulas, ingredientesRegistro } from "@/lib/formulation-data"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
+import { useClient } from "@/contexts/client-context"
 
 interface Rotulo {
   id: number
@@ -96,6 +98,7 @@ const rotulosIniciais: Rotulo[] = [
 ]
 
 export default function RotulagemPage() {
+  const { activeClient } = useClient()
   const [rotulos, setRotulos] = useState<Rotulo[]>(rotulosIniciais)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -122,7 +125,7 @@ export default function RotulagemPage() {
     const now = new Date().toLocaleDateString("pt-BR")
 
     // Cabeçalho com logo
-    let yPos = await drawPdfHeader(doc, "Ficha de Rótulo", now)
+    let yPos = await drawPdfHeader(doc, "Ficha de Rótulo", now, activeClient)
 
     // Título produto
     doc.setTextColor(0, 0, 0)
@@ -217,7 +220,7 @@ export default function RotulagemPage() {
     const H = doc.internal.pageSize.getHeight()
 
     // Cabeçalho com logo
-    let yFPos = await drawPdfHeader(doc, "Declaração de Ingredientes para Rótulo", now)
+    let yFPos = await drawPdfHeader(doc, "Declaração de Ingredientes para Rótulo", now, activeClient)
 
     // Produto
     doc.setTextColor(0, 0, 0)
@@ -317,7 +320,7 @@ export default function RotulagemPage() {
     const H = doc.internal.pageSize.getHeight()
 
     // Cabeçalho com logo
-    const yAPos = await drawPdfHeader(doc, "Aditivos e Ingredientes Permitidos em Néctares", now)
+    const yAPos = await drawPdfHeader(doc, "Aditivos e Ingredientes Permitidos em Néctares", now, activeClient)
 
     autoTable(doc, {
       startY: yAPos,
@@ -391,13 +394,10 @@ export default function RotulagemPage() {
     <div className="flex h-screen bg-background">
       <AppSidebar />
       <main className="flex-1 overflow-auto">
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Rotulagem</h1>
-              <p className="text-muted-foreground">Gerenciamento de rótulos e etiquetas de produtos</p>
-            </div>
+        <PageHeader 
+          title="Rotulagem" 
+          description="Gerenciamento de rótulos e etiquetas de produtos"
+          actions={
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2">
@@ -501,8 +501,9 @@ export default function RotulagemPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-          </div>
-
+          }
+        />
+        <div className="p-6 space-y-6">
           {/* Abas principais */}
           <Tabs defaultValue="rotulos">
             <TabsList className="bg-secondary border border-border">

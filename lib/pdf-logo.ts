@@ -15,27 +15,31 @@ export async function getLogoBase64(): Promise<string> {
 /**
  * Draws the Viabilizze logo + subtitle header into a jsPDF document.
  * Returns the Y position after the header so content can start below it.
+ * @param companyName - Optional company name to display on the report header
  */
 export async function drawPdfHeader(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   doc: any,
   subtitle: string,
-  date: string
+  date: string,
+  companyName?: string
 ): Promise<number> {
   const W = doc.internal.pageSize.getWidth()
+  const hasCompany = companyName && companyName.trim().length > 0
+  const headerHeight = hasCompany ? 34 : 26
 
   // White header bar
   doc.setFillColor(255, 255, 255)
-  doc.rect(0, 0, W, 26, "F")
+  doc.rect(0, 0, W, headerHeight, "F")
 
   // Orange accent strip at bottom of header
   doc.setFillColor(234, 88, 12)
-  doc.rect(0, 24, W, 2, "F")
+  doc.rect(0, headerHeight - 2, W, 2, "F")
 
   // Light separator line above the strip
   doc.setDrawColor(230, 230, 230)
   doc.setLineWidth(0.3)
-  doc.line(0, 24, W, 24)
+  doc.line(0, headerHeight - 2, W, headerHeight - 2)
 
   // Logo image
   try {
@@ -50,6 +54,14 @@ export async function drawPdfHeader(
     doc.text("VIABILIZZE", 12, 16)
   }
 
+  // Company name below logo (if provided)
+  if (hasCompany) {
+    doc.setTextColor(22, 163, 74) // Primary green color
+    doc.setFontSize(11)
+    doc.setFont("helvetica", "bold")
+    doc.text(companyName, 12, 26)
+  }
+
   // Subtitle and date on the right — dark text on white background
   doc.setTextColor(40, 40, 40)
   doc.setFontSize(9)
@@ -60,7 +72,7 @@ export async function drawPdfHeader(
   doc.setTextColor(100, 100, 100)
   doc.text(`Emitido em ${date}`, W - 12, 17, { align: "right" })
 
-  return 32 // Y start for content
+  return headerHeight + 6 // Y start for content
 }
 
 /**

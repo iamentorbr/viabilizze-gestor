@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useClient } from "@/contexts/client-context"
 import { AppSidebar } from "@/components/app-sidebar"
+import { PageHeader } from "@/components/page-header"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -33,26 +34,18 @@ export default function ConfiguracoesPage() {
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         <main className="flex-1 overflow-auto bg-background">
-          {/* Header */}
-          <header className="border-b border-border bg-card px-6 py-4">
-            <div className="flex items-center gap-4">
+          <PageHeader 
+            title="Configurações" 
+            description="Configurações do sistema"
+            actions={
               <Link 
                 href="/"
                 className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Link>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Settings className="h-5 w-5" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-foreground">Configuracoes</h1>
-                  <p className="text-sm text-muted-foreground">Configuracoes do sistema</p>
-                </div>
-              </div>
-            </div>
-          </header>
+            }
+          />
 
           <div className="p-6">
             <div className="max-w-4xl space-y-6">
