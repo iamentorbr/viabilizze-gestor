@@ -1,70 +1,185 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useMemo, useEffect, useCallback } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown } from "lucide-react"
-import { formulas, proporcoes, ingredientesRegistro } from "@/lib/formulation-data"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown, Settings, Database, Loader2 } from "lucide-react"
+import { formulas as formulasExemplo, proporcoes, ingredientesRegistro } from "@/lib/formulation-data"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
 import { useClient } from "@/contexts/client-context"
+import { createClient } from "@/lib/supabase/client"
+import { PlanilhaUpload } from "@/components/planilha-upload"
+import type { Formulacao, Insumo, FormulacaoCompleta } from "@/lib/types/calculadora"
+
+// Converte dados do Supabase para o formato interno
+function convertToInternalFormat(formulacao: FormulacaoCompleta) {
+  return {
+    fruta: formulacao.produto,
+    tipoProduto: formulacao.categoria === "nectar" ? "Néctar Tropical" : "Bebida",
+    observacoes: formulacao.observacao || "",
+    specifications: {
+      brixMin: formulacao.brix_min || 10,
+      brixMax: formulacao.brix_max || 14,
+      acidezMin: formulacao.acidez_min || 0.2,
+      acidezMax: formulacao.acidez_max || 0.5,
+      phMin: formulacao.ph_min || 3.0,
+      phMax: formulacao.ph_max || 4.5,
+      polpaMin: formulacao.perc_suco_minimo_legal || 10,
+      legislacao: formulacao.norma_referencia || "IN 37/2018 MAPA",
+    },
+    ingredients: formulacao.insumos.map((ins) => ({
+      name: ins.nome,
+      per1000L: ins.qtd_base_por_1000L,
+      unit: ins.unidade,
+      obs: ins.tipo !== "aditivo" ? ins.tipo : undefined,
+      isQSP: ins.is_agua_qsp,
+      brix: ins.brix_insumo,
+      fatorReconstituicao: ins.fator_reconstituicao,
+      densidade: ins.densidade_kg_L,
+      acidez: ins.acidez_natural,
+      preco: ins.preco_unitario_kg,
+    })),
+  }
+}
 
 export function ProductionCalculator() {
-  const { activeClient } = useClient()
-  const [selectedFruta, setSelectedFruta] = useState<string>(formulas[11].fruta) // Caju
+  const { activeClient, activeSystemId } = useClient()
+  const supabase = createClient()
+  
+  // Estados de dados
+  const [formulacoesDB, setFormulacoesDB] = useState<FormulacaoCompleta[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasCustomData, setHasCustomData] = useState(false)
+  
+  // Estados da calculadora
+  const [selectedProduto, setSelectedProduto] = useState<string>("")
   const [quantity, setQuantity] = useState<number>(25000)
   const [productionPercentage, setProductionPercentage] = useState<number>(80)
   const [brixConcentradoInput, setBrixConcentradoInput] = useState<number>(0)
   const [volumeFinal, setVolumeFinal] = useState<number>(1000)
 
+  // Carregar formulações do Supabase
+  const loadFormulacoes = useCallback(async () => {
+    if (!activeSystemId) return
+    
+    setIsLoading(true)
+    try {
+      const { data: formData, error: formError } = await supabase
+        .from("formulacoes")
+        .select("*")
+        .eq("empresa_id", activeSystemId)
+        .order("produto")
+
+      if (formError) throw formError
+
+      if (formData && formData.length > 0) {
+        // Carregar insumos para cada formulação
+        const formulacoesCompletas: FormulacaoCompleta[] = await Promise.all(
+          formData.map(async (form: Formulacao) => {
+            const { data: insumosData } = await supabase
+              .from("insumos")
+              .select("*")
+              .eq("formulacao_id", form.id)
+              .order("nome")
+            
+            return {
+              ...form,
+              insumos: (insumosData as Insumo[]) || [],
+            }
+          })
+        )
+
+        setFormulacoesDB(formulacoesCompletas)
+        setHasCustomData(true)
+        // Selecionar primeiro produto se nenhum selecionado
+        if (!selectedProduto && formulacoesCompletas.length > 0) {
+          setSelectedProduto(formulacoesCompletas[0].produto)
+        }
+      } else {
+        setHasCustomData(false)
+        // Usar dados de exemplo se não há dados customizados
+        if (!selectedProduto) {
+          setSelectedProduto(formulasExemplo[11].fruta) // Caju como padrão
+        }
+      }
+    } catch (error) {
+      console.error("[v0] Erro ao carregar formulações:", error)
+      setHasCustomData(false)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [activeSystemId, supabase, selectedProduto])
+
+  useEffect(() => {
+    loadFormulacoes()
+  }, [loadFormulacoes])
+
+  // Formulas disponíveis (DB ou exemplo)
+  const formulasDisponiveis = useMemo(() => {
+    if (hasCustomData && formulacoesDB.length > 0) {
+      return formulacoesDB.map(convertToInternalFormat)
+    }
+    return formulasExemplo
+  }, [hasCustomData, formulacoesDB])
+
   const currentFormula = useMemo(
-    () => formulas.find((f) => f.fruta === selectedFruta) || formulas[0],
-    [selectedFruta]
+    () => formulasDisponiveis.find((f) => f.fruta === selectedProduto) || formulasDisponiveis[0],
+    [selectedProduto, formulasDisponiveis]
   )
 
   const currentProporcao = useMemo(
-    () => proporcoes.find((p) => p.fruta === selectedFruta),
-    [selectedFruta]
+    () => proporcoes.find((p) => p.fruta === selectedProduto),
+    [selectedProduto]
   )
 
   // ── Cálculo principal de insumos ─────────────────────────────
   const calculations = useMemo(() => {
+    if (!currentFormula) return []
     const factor = quantity / 1000
     const adjustedFactor = (factor * productionPercentage) / 100
     return currentFormula.ingredients.map((ing) => ({
       ...ing,
       totalFull: ing.isQSP ? null : +(ing.per1000L * factor).toFixed(3),
       totalAdjusted: ing.isQSP ? null : +(ing.per1000L * adjustedFactor).toFixed(3),
+      custoTotal: ing.preco ? +(ing.per1000L * adjustedFactor * ing.preco).toFixed(2) : null,
     }))
   }, [currentFormula, quantity, productionPercentage])
+
+  // Custo total estimado
+  const custoTotalEstimado = useMemo(() => {
+    return calculations.reduce((acc, item) => acc + (item.custoTotal || 0), 0)
+  }, [calculations])
 
   // ── Cálculo de proporção / diluição ─────────────────────────
   const propCalc = useMemo(() => {
     const brixC = brixConcentradoInput > 0 ? brixConcentradoInput : (currentProporcao?.brixConcentrado ?? 0)
-    const brixAlvo = currentProporcao?.brixFinalNectar ?? 11.0
+    const brixAlvo = currentProporcao?.brixFinalNectar ?? currentFormula?.specifications?.brixMin ?? 11.0
     if (!brixC || brixC <= brixAlvo) return null
-    // Regra de mistura simples: Cc * Vc = Cf * Vf
-    // Vc / Vf = Cf / Cc  => proporção de concentrado no total
     const fracConcentrado = brixAlvo / brixC
     const fracAgua = 1 - fracConcentrado
     const concVol = +(fracConcentrado * volumeFinal).toFixed(2)
     const aguaVol = +(fracAgua * volumeFinal).toFixed(2)
     const fatorDiluicao = +(fracAgua / fracConcentrado).toFixed(2)
     const percPolpa = +(fracConcentrado * 100).toFixed(1)
-    const percLegal = currentProporcao?.percPolpaLegal ?? 0
+    const percLegal = currentProporcao?.percPolpaLegal ?? currentFormula?.specifications?.polpaMin ?? 0
     const atendeLegisl = percPolpa >= percLegal
     return { brixC, brixAlvo, fracConcentrado, fracAgua, concVol, aguaVol, fatorDiluicao, percPolpa, percLegal, atendeLegisl }
-  }, [brixConcentradoInput, currentProporcao, volumeFinal])
+  }, [brixConcentradoInput, currentProporcao, volumeFinal, currentFormula])
 
-  const idealSpecs = useMemo(() => ({
-    brix: (((currentFormula.specifications.brixMin + currentFormula.specifications.brixMax) / 2)).toFixed(2),
-    acidez: (((currentFormula.specifications.acidezMin + currentFormula.specifications.acidezMax) / 2)).toFixed(3),
-    ph: (((currentFormula.specifications.phMin + currentFormula.specifications.phMax) / 2)).toFixed(2),
-  }), [currentFormula])
+  const idealSpecs = useMemo(() => {
+    if (!currentFormula) return { brix: "0", acidez: "0", ph: "0" }
+    return {
+      brix: (((currentFormula.specifications.brixMin + currentFormula.specifications.brixMax) / 2)).toFixed(2),
+      acidez: (((currentFormula.specifications.acidezMin + currentFormula.specifications.acidezMax) / 2)).toFixed(3),
+      ph: (((currentFormula.specifications.phMin + currentFormula.specifications.phMax) / 2)).toFixed(2),
+    }
+  }, [currentFormula])
 
   const fmt = (n: number) =>
     n.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })
@@ -85,7 +200,7 @@ export function ProductionCalculator() {
     doc.setTextColor(0, 0, 0)
     doc.setFontSize(16)
     doc.setFont("helvetica", "bold")
-    doc.text(`Néctar de ${currentFormula.fruta} — ${currentFormula.tipoProduto}`, 14, yPos)
+    doc.text(`${currentFormula.fruta} — ${currentFormula.tipoProduto}`, 14, yPos)
     yPos += 7
 
     if (currentFormula.specifications.legislacao) {
@@ -114,6 +229,7 @@ export function ProductionCalculator() {
         ["Volume total a produzir", `${quantity.toLocaleString("pt-BR")} L`],
         ["Percentual de produção", `${productionPercentage}%`],
         ["Volume ajustado (p/ produção)", `${(quantity * productionPercentage / 100).toLocaleString("pt-BR")} L`],
+        ...(custoTotalEstimado > 0 ? [["Custo estimado dos insumos", `R$ ${custoTotalEstimado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`]] : []),
       ],
       margin: { left: 14, right: 14 },
     })
@@ -226,26 +342,45 @@ export function ProductionCalculator() {
     // ── Rodapé ───────────────────────────────────────────────────
     drawPdfFooter(doc)
 
-    doc.save(`formulacao-nectar-${currentFormula.fruta.toLowerCase().replace(/\s+/g, "-")}-${now.replace(/\//g, "-")}.pdf`)
+    doc.save(`formulacao-${currentFormula.fruta.toLowerCase().replace(/\s+/g, "-")}-${now.replace(/\//g, "-")}.pdf`)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-3 text-muted-foreground">Carregando formulações...</span>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
+      {/* Banner informativo sobre fonte de dados */}
+      {!hasCustomData && (
+        <Alert>
+          <Database className="h-4 w-4" />
+          <AlertDescription>
+            Usando dados de exemplo. Vá na aba <strong>Configurar</strong> para importar suas próprias formulações.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Controles superiores */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="border-border bg-card">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <FlaskConical className="h-4 w-4" /> Fruta / Receita
+              <FlaskConical className="h-4 w-4" /> Produto / Receita
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Select value={selectedFruta} onValueChange={setSelectedFruta}>
+            <Select value={selectedProduto} onValueChange={setSelectedProduto}>
               <SelectTrigger className="bg-secondary border-border">
-                <SelectValue />
+                <SelectValue placeholder="Selecione um produto" />
               </SelectTrigger>
               <SelectContent>
-                {formulas.map((f) => (
+                {formulasDisponiveis.map((f) => (
                   <SelectItem key={f.fruta} value={f.fruta}>
                     {f.fruta} — {f.tipoProduto}
                   </SelectItem>
@@ -304,6 +439,9 @@ export function ProductionCalculator() {
           <TabsTrigger value="registro" className="gap-2">
             <FileText className="h-4 w-4" /> Formulação p/ Registro
           </TabsTrigger>
+          <TabsTrigger value="configurar" className="gap-2">
+            <Settings className="h-4 w-4" /> Configurar
+          </TabsTrigger>
         </TabsList>
 
         {/* ── ABA: FORMULAÇÃO ─────────────────────────────────────── */}
@@ -315,9 +453,9 @@ export function ProductionCalculator() {
                   <div className="flex-1">
                     <CardTitle className="flex items-center gap-2">
                       <Beaker className="h-5 w-5 text-primary" />
-                      Formulação — Néctar de {currentFormula.fruta}
+                      Formulação — {currentFormula?.fruta || "Selecione um produto"}
                     </CardTitle>
-                    {currentFormula.specifications.legislacao && (
+                    {currentFormula?.specifications?.legislacao && (
                       <p className="text-xs text-muted-foreground flex items-start gap-1 mt-1">
                         <Info className="h-3 w-3 mt-0.5 shrink-0" />
                         {currentFormula.specifications.legislacao}
@@ -339,12 +477,12 @@ export function ProductionCalculator() {
                     <TableHeader>
                       <TableRow className="bg-secondary/50 hover:bg-secondary/50">
                         <TableHead className="font-semibold">Insumo</TableHead>
-                        <TableHead className="text-center font-semibold">Por 1.000 L (kg)</TableHead>
+                        <TableHead className="text-center font-semibold">Por 1.000 L</TableHead>
                         <TableHead className="text-center font-semibold">
                           Total ({quantity.toLocaleString("pt-BR")} L)
                         </TableHead>
                         <TableHead className="text-center font-semibold">
-                          {productionPercentage}% (kg)
+                          {productionPercentage}% (ajustado)
                         </TableHead>
                       </TableRow>
                     </TableHeader>
@@ -360,20 +498,22 @@ export function ProductionCalculator() {
                           <TableCell className="text-center font-mono">
                             {item.isQSP ? (
                               <Badge variant="outline" className="border-primary text-primary">QSP</Badge>
-                            ) : item.per1000L.toFixed(3)}
-                          </TableCell>
-                          <TableCell className="text-center font-mono">
-                            {item.isQSP ? (
-                              <Badge variant="outline" className="border-primary text-primary">QSP</Badge>
                             ) : (
-                              <span className="text-primary font-semibold">{fmt(item.totalFull!)}</span>
+                              <span>{item.per1000L.toFixed(3)} {item.unit}</span>
                             )}
                           </TableCell>
                           <TableCell className="text-center font-mono">
                             {item.isQSP ? (
                               <Badge variant="outline" className="border-primary text-primary">QSP</Badge>
                             ) : (
-                              <span className="text-accent font-semibold">{fmt(item.totalAdjusted!)}</span>
+                              <span className="text-primary font-semibold">{fmt(item.totalFull!)} {item.unit}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center font-mono">
+                            {item.isQSP ? (
+                              <Badge variant="outline" className="border-primary text-primary">QSP</Badge>
+                            ) : (
+                              <span className="text-accent font-semibold">{fmt(item.totalAdjusted!)} {item.unit}</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -381,7 +521,20 @@ export function ProductionCalculator() {
                     </TableBody>
                   </Table>
                 </div>
-                {currentFormula.observacoes && (
+                
+                {/* Custo estimado */}
+                {custoTotalEstimado > 0 && (
+                  <div className="mt-4 p-4 rounded-lg bg-primary/10 border border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Custo estimado dos insumos:</span>
+                      <span className="font-mono text-lg font-bold text-primary">
+                        R$ {custoTotalEstimado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {currentFormula?.observacoes && (
                   <div className="mt-3 p-3 rounded-lg bg-muted/50 border border-border text-xs text-muted-foreground flex gap-2">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     {currentFormula.observacoes}
@@ -396,7 +549,7 @@ export function ProductionCalculator() {
                 <CardTitle className="text-sm font-medium">Especificações do Produto</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {[
+                {currentFormula && [
                   {
                     label: "Brix (°Bx)",
                     min: currentFormula.specifications.brixMin,
@@ -435,7 +588,7 @@ export function ProductionCalculator() {
                   </div>
                 ))}
 
-                {currentFormula.specifications.polpaMin !== undefined && (
+                {currentFormula?.specifications?.polpaMin !== undefined && (
                   <div className="pt-3 border-t border-border">
                     <Label className="text-muted-foreground text-xs uppercase tracking-wider">
                       Mín. Legal de Polpa/Suco
@@ -467,7 +620,7 @@ export function ProductionCalculator() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Scale className="h-5 w-5 text-primary" />
-                  Cálculo de Diluição — {selectedFruta}
+                  Cálculo de Diluição — {selectedProduto || "Selecione um produto"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
@@ -550,7 +703,7 @@ export function ProductionCalculator() {
                 <CardTitle className="text-sm font-medium">Referência — Todas as Frutas</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="rounded-lg border border-border overflow-hidden">
+                <div className="rounded-lg border border-border overflow-hidden max-h-96 overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-secondary/50 hover:bg-secondary/50">
@@ -564,8 +717,8 @@ export function ProductionCalculator() {
                       {proporcoes.map((p) => (
                         <TableRow
                           key={p.fruta}
-                          className={`hover:bg-secondary/30 cursor-pointer ${p.fruta === selectedFruta ? "bg-primary/10" : ""}`}
-                          onClick={() => setSelectedFruta(p.fruta)}
+                          className={`hover:bg-secondary/30 cursor-pointer ${p.fruta === selectedProduto ? "bg-primary/10" : ""}`}
+                          onClick={() => setSelectedProduto(p.fruta)}
                         >
                           <TableCell className="font-medium">{p.fruta}</TableCell>
                           <TableCell className="text-center font-mono">{p.brixConcentrado}°</TableCell>
@@ -662,6 +815,58 @@ export function ProductionCalculator() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── ABA: CONFIGURAR ─────────────────────────────────────── */}
+        <TabsContent value="configurar">
+          <div className="space-y-6">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5 text-primary" />
+                  Suas Formulações
+                </CardTitle>
+                <CardDescription>
+                  {hasCustomData 
+                    ? `Você tem ${formulacoesDB.length} formulação(ões) cadastrada(s) para ${activeClient}.`
+                    : `Nenhuma formulação cadastrada para ${activeClient}. Importe uma planilha abaixo.`
+                  }
+                </CardDescription>
+              </CardHeader>
+              {hasCustomData && (
+                <CardContent>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-secondary/50">
+                          <TableHead>Produto</TableHead>
+                          <TableHead className="text-center">Insumos</TableHead>
+                          <TableHead className="text-center">Brix</TableHead>
+                          <TableHead className="text-center">% Suco Mín.</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {formulacoesDB.map((form) => (
+                          <TableRow key={form.id} className="hover:bg-secondary/30">
+                            <TableCell className="font-medium">{form.produto}</TableCell>
+                            <TableCell className="text-center">{form.insumos.length}</TableCell>
+                            <TableCell className="text-center font-mono">
+                              {form.brix_min || "—"} - {form.brix_max || "—"}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant="outline">{form.perc_suco_minimo_legal || 10}%</Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+
+            <PlanilhaUpload onUploadComplete={loadFormulacoes} />
           </div>
         </TabsContent>
       </Tabs>
