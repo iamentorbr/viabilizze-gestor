@@ -21,9 +21,10 @@ interface UploadResult {
 }
 
 export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
-  const { activeSystemId } = useClient()
+  const { activeSystemId, activeClient } = useClient()
   const [isProcessing, setIsProcessing] = useState(false)
   const [preview, setPreview] = useState<PlanilhaRow[]>([])
+  const [allRows, setAllRows] = useState<PlanilhaRow[]>([])
   const [result, setResult] = useState<UploadResult | null>(null)
   const [fileName, setFileName] = useState<string>("")
 
@@ -82,6 +83,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
 
     try {
       const rows = await parseExcel(file)
+      setAllRows(rows) // Guardar todas as linhas para o upload
       setPreview(rows.slice(0, 10)) // Mostrar apenas primeiras 10 linhas
       setIsProcessing(false)
     } catch {
@@ -101,26 +103,16 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
   })
 
   const handleConfirmUpload = async () => {
-    if (!preview.length || !activeSystemId) return
+    if (!allRows.length || !activeSystemId) {
+      setResult({ success: false, message: "Nenhum dado para importar ou empresa não selecionada." })
+      return
+    }
 
     setIsProcessing(true)
     setResult(null)
 
     try {
       const supabase = createClient()
-      const file = await fetch(URL.createObjectURL(new Blob([fileName]))).catch(() => null)
-      
-      // Re-parse the file to get all rows
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      const originalFile = fileInput?.files?.[0]
-      if (!originalFile) {
-        // Use preview data if we can't re-read file
-        const allRows = preview
-        await processRows(supabase, allRows)
-        return
-      }
-
-      const allRows = await parseExcel(originalFile)
       await processRows(supabase, allRows)
     } catch (error) {
       console.error("[v0] Upload error:", error)
@@ -205,17 +197,19 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
 
     setResult({
       success: true,
-      message: `Upload concluído com sucesso!`,
+      message: `Upload para "${activeClient}" concluído com sucesso!`,
       formulacoesCount,
       insumosCount,
     })
     setPreview([])
+    setAllRows([])
     setFileName("")
     onUploadComplete?.()
   }
 
   const handleClearPreview = () => {
     setPreview([])
+    setAllRows([])
     setFileName("")
     setResult(null)
   }
@@ -284,6 +278,9 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
             <CardDescription>
               Importe suas formulações a partir de uma planilha Excel ou CSV
             </CardDescription>
+            <Badge variant="outline" className="mt-2 text-primary border-primary">
+              Destino: {activeClient}
+            </Badge>
           </div>
           <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2">
             <Download className="h-4 w-4" />
