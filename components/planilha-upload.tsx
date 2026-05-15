@@ -34,10 +34,22 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
       reader.onload = (e) => {
         try {
           const data = e.target?.result
-          const workbook = XLSX.read(data, { type: "binary" })
+          if (!data) {
+            reject(new Error("Falha ao ler arquivo"))
+            return
+          }
+          
+          // Usar ArrayBuffer para maior compatibilidade
+          const workbook = XLSX.read(data, { type: "array" })
           const sheetName = workbook.SheetNames[0]
+          if (!sheetName) {
+            reject(new Error("Planilha vazia"))
+            return
+          }
           const worksheet = workbook.Sheets[sheetName]
           const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet)
+          
+          console.log("[v0] Raw JSON data:", jsonData.slice(0, 2))
           
           // Mapear colunas para o formato esperado
           const rows: PlanilhaRow[] = jsonData.map((row) => ({
@@ -68,26 +80,48 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
           reject(error)
         }
       }
-      reader.onerror = reject
-      reader.readAsBinaryString(file)
+      reader.onerror = (error) => {
+        console.error("[v0] FileReader error:", error)
+        reject(error)
+      }
+      // Usar ArrayBuffer para maior compatibilidade com XLSX
+      reader.readAsArrayBuffer(file)
     })
   }, [])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    console.log("[v0] onDrop called with files:", acceptedFiles)
     const file = acceptedFiles[0]
-    if (!file) return
+    if (!file) {
+      console.log("[v0] No file received")
+      return
+    }
 
+    console.log("[v0] File received:", file.name, file.type, file.size)
     setFileName(file.name)
     setResult(null)
     setIsProcessing(true)
 
     try {
       const rows = await parseExcel(file)
+      console.log("[v0] Parsed rows:", rows.length)
+      
+      if (rows.length === 0) {
+        setResult({ 
+          success: false, 
+          message: "Nenhum dado válido encontrado. Verifique se a planilha contém as colunas: produto, insumo, qtd_base_por_1000L" 
+        })
+        setIsProcessing(false)
+        return
+      }
+      
       setAllRows(rows) // Guardar todas as linhas para o upload
       setPreview(rows.slice(0, 10)) // Mostrar apenas primeiras 10 linhas
       setIsProcessing(false)
-    } catch {
-      setResult({ success: false, message: "Erro ao ler o arquivo. Verifique o formato." })
+    } catch (error) {
+      console.error("[v0] Parse error:", error)
+      const errorMsg = error instanceof Error ? error.message : "Erro desconhecido"
+      setResult({ success: false, message: `Erro ao ler o arquivo: ${errorMsg}` })
       setIsProcessing(false)
     }
   }, [parseExcel])
