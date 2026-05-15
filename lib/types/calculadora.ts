@@ -54,6 +54,47 @@ export interface ResultadoCalculo {
   custoEstimado?: number
 }
 
+// Tipos para Ordens de Produção
+export interface OrdemProducao {
+  id: string
+  empresa_id: string
+  codigo: string
+  formulacao_id?: string
+  produto: string
+  volume_litros: number
+  percentual_producao: number
+  status: 'Aguardando' | 'Em Produção' | 'Concluído' | 'Cancelado'
+  prioridade: 'Baixa' | 'Normal' | 'Alta' | 'Urgente'
+  operador?: string
+  observacao?: string
+  data_programada?: string
+  data_inicio?: string
+  data_conclusao?: string
+  custo_estimado?: number
+  created_at: string
+}
+
+export interface OrdemInsumo {
+  id: string
+  ordem_id: string
+  nome: string
+  tipo?: string
+  quantidade: number
+  unidade: string
+  custo_unitario?: number
+  custo_total?: number
+  created_at: string
+}
+
+export type OrdemProducaoInsert = Omit<OrdemProducao, 'id' | 'created_at'>
+export type OrdemInsumoInsert = Omit<OrdemInsumo, 'id' | 'created_at'>
+
+// Ordem com seus insumos calculados
+export interface OrdemCompleta extends OrdemProducao {
+  insumos: OrdemInsumo[]
+  formulacao?: Formulacao
+}
+
 // Tipo para upload de planilha
 export interface PlanilhaRow {
   produto: string
