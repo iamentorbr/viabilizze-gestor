@@ -21,7 +21,7 @@ interface UploadResult {
 }
 
 export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => void }) {
-  const { activeSystemId, activeClient } = useClient()
+  const { activeSupabaseId, activeClient } = useClient()
   const [isProcessing, setIsProcessing] = useState(false)
   const [preview, setPreview] = useState<PlanilhaRow[]>([])
   const [allRows, setAllRows] = useState<PlanilhaRow[]>([])
@@ -137,7 +137,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
   })
 
   const handleConfirmUpload = async () => {
-    if (!allRows.length || !activeSystemId) {
+    if (!allRows.length || !activeSupabaseId) {
       setResult({ success: false, message: "Nenhum dado para importar ou empresa não selecionada." })
       return
     }
@@ -174,7 +174,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
       
       // Inserir ou atualizar formulação
       const formulacaoData: FormulacaoInsert = {
-        empresa_id: activeSystemId,
+        empresa_id: activeSupabaseId,
         produto,
         categoria: "nectar",
         brix_min: firstRow.brix_min,

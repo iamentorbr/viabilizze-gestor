@@ -19,7 +19,7 @@ import { PlanilhaUpload } from "@/components/planilha-upload"
 import { toast } from "sonner"
 
 export default function FormulasPage() {
-  const { activeClient } = useClient()
+  const { activeSupabaseId } = useClient()
   const [formulacoes, setFormulacoes] = useState<FormulacaoCompleta[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
@@ -28,7 +28,7 @@ export default function FormulasPage() {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
 
   const carregarFormulacoes = useCallback(async () => {
-    if (!activeClient) return
+    if (!activeSupabaseId) return
     
     setLoading(true)
     const supabase = createClient()
@@ -38,7 +38,7 @@ export default function FormulasPage() {
       const { data: formulas, error: formulasError } = await supabase
         .from("formulacoes")
         .select("*")
-        .eq("empresa_id", activeClient)
+        .eq("empresa_id", activeSupabaseId)
         .order("produto")
 
       if (formulasError) throw formulasError
@@ -71,7 +71,7 @@ export default function FormulasPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeClient])
+  }, [activeSupabaseId])
 
   useEffect(() => {
     carregarFormulacoes()

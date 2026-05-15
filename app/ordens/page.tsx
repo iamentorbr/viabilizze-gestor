@@ -23,7 +23,7 @@ import { Insumo, FormulacaoCompleta, OrdemProducao, OrdemInsumo, OrdemCompleta }
 import { toast } from "sonner"
 
 export default function OrdensPage() {
-  const { activeClient } = useClient()
+  const { activeSupabaseId } = useClient()
   const [ordens, setOrdens] = useState<OrdemCompleta[]>([])
   const [formulacoes, setFormulacoes] = useState<FormulacaoCompleta[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,7 +46,7 @@ export default function OrdensPage() {
   })
 
   const carregarDados = useCallback(async () => {
-    if (!activeClient) return
+    if (!activeSupabaseId) return
     
     setLoading(true)
     const supabase = createClient()
@@ -55,7 +55,7 @@ export default function OrdensPage() {
       const { data: formulasData, error: formulasError } = await supabase
         .from("formulacoes")
         .select("*")
-        .eq("empresa_id", activeClient)
+        .eq("empresa_id", activeSupabaseId)
         .order("produto")
 
       if (formulasError) throw formulasError
@@ -81,7 +81,7 @@ export default function OrdensPage() {
       const { data: ordensData, error: ordensError } = await supabase
         .from("ordens_producao")
         .select("*")
-        .eq("empresa_id", activeClient)
+        .eq("empresa_id", activeSupabaseId)
         .order("created_at", { ascending: false })
 
       if (ordensError) throw ordensError
@@ -110,7 +110,7 @@ export default function OrdensPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeClient])
+  }, [activeSupabaseId])
 
   useEffect(() => {
     carregarDados()
@@ -170,7 +170,7 @@ export default function OrdensPage() {
       const { data: ordemData, error: ordemError } = await supabase
         .from("ordens_producao")
         .insert({
-          empresa_id: activeClient,
+          empresa_id: activeSupabaseId,
           codigo: gerarCodigoOrdem(),
           formulacao_id: novaOrdem.formulacao_id,
           produto: formulacao.produto,

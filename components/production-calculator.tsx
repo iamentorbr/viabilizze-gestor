@@ -49,7 +49,7 @@ function convertToInternalFormat(formulacao: FormulacaoCompleta) {
 }
 
 export function ProductionCalculator() {
-  const { activeClient, activeSystemId } = useClient()
+  const { activeClient, activeSupabaseId } = useClient()
   const supabase = createClient()
   
   // Estados de dados
@@ -66,14 +66,14 @@ export function ProductionCalculator() {
 
   // Carregar formulações do Supabase
   const loadFormulacoes = useCallback(async () => {
-    if (!activeSystemId) return
+    if (!activeSupabaseId) return
     
     setIsLoading(true)
     try {
       const { data: formData, error: formError } = await supabase
         .from("formulacoes")
         .select("*")
-        .eq("empresa_id", activeSystemId)
+        .eq("empresa_id", activeSupabaseId)
         .order("produto")
 
       if (formError) throw formError
@@ -114,7 +114,7 @@ export function ProductionCalculator() {
     } finally {
       setIsLoading(false)
     }
-  }, [activeSystemId, supabase, selectedProduto])
+  }, [activeSupabaseId, supabase, selectedProduto])
 
   useEffect(() => {
     loadFormulacoes()

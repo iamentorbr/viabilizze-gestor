@@ -27,7 +27,7 @@ import type { AnaliseQualidade, AnaliseQualidadeInsert, OrdemProducao } from "@/
 import { toast } from "sonner"
 
 export default function QualidadePage() {
-  const { activeClient, activeSystemId } = useClient()
+  const { activeClient, activeSupabaseId } = useClient()
   const [analises, setAnalises] = useState<AnaliseQualidade[]>([])
   const [ordensDisponiveis, setOrdensDisponiveis] = useState<OrdemProducao[]>([])
   const [loading, setLoading] = useState(true)
@@ -49,13 +49,13 @@ export default function QualidadePage() {
   // Carregar análises da empresa
   useEffect(() => {
     async function loadData() {
-      if (!activeSystemId) return
+      if (!activeSupabaseId) return
       setLoading(true)
 
       const { data: analisesData } = await supabase
         .from("analises_qualidade")
         .select("*")
-        .eq("empresa_id", activeSystemId)
+        .eq("empresa_id", activeSupabaseId)
         .order("created_at", { ascending: false })
 
       if (analisesData) {
@@ -65,7 +65,7 @@ export default function QualidadePage() {
       const { data: ordensData } = await supabase
         .from("ordens_producao")
         .select("*")
-        .eq("empresa_id", activeSystemId)
+        .eq("empresa_id", activeSupabaseId)
         .eq("status", "Concluído")
         .order("created_at", { ascending: false })
 
@@ -77,7 +77,7 @@ export default function QualidadePage() {
     }
 
     loadData()
-  }, [activeSystemId])
+  }, [activeSupabaseId])
 
   function calcularResultado(
     brix: number | undefined, brixMin: number | undefined, brixMax: number | undefined,
@@ -115,7 +115,7 @@ export default function QualidadePage() {
   }
 
   async function handleCreateAnalise() {
-    if (!activeSystemId || !ordemSelecionada) {
+    if (!activeSupabaseId || !ordemSelecionada) {
       toast.error("Selecione uma ordem de produção")
       return
     }
@@ -151,7 +151,7 @@ export default function QualidadePage() {
     const codigo = `AQ-${Date.now().toString(36).toUpperCase()}`
 
     const novaAnalise: AnaliseQualidadeInsert = {
-      empresa_id: activeSystemId,
+      empresa_id: activeSupabaseId,
       codigo,
       ordem_id: ordem.id,
       ordem_codigo: ordem.codigo,

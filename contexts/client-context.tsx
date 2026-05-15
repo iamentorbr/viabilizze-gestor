@@ -35,6 +35,18 @@ export interface ClientSystem {
   industria?: Industria
   formulaBancada?: FormulaBancada
   formulaProducao?: FormulaProducao
+  supabaseId?: string // ID usado no Supabase (slug: "geracao-z", "producao-brigatta", etc)
+}
+
+// Função helper para gerar slug do nome da empresa
+export function generateSupabaseId(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/[^a-z0-9\s-]/g, "") // remove caracteres especiais
+    .trim()
+    .replace(/\s+/g, "-") // espaços para hífens
 }
 
 interface ClientContextType {
@@ -45,6 +57,7 @@ interface ClientContextType {
   switchSystem: (id: string) => void
   deleteSystem: (id: string) => void
   activeSystemId: string
+  activeSupabaseId: string // ID para consultas no Supabase
   industriaSelecionada: Industria | null
   setIndustriaSelecionada: (industria: Industria | null) => void
   hasExampleData: boolean
@@ -85,6 +98,11 @@ export function ClientProvider({ children }: { children: ReactNode }) {
   // Derived: current system's industry
   const industriaSelecionada: Industria | null =
     systems.find((s) => s.id === activeSystemId)?.industria ?? null
+
+  // Derived: Supabase ID for database queries
+  const activeSupabaseId: string = 
+    systems.find((s) => s.id === activeSystemId)?.supabaseId ?? 
+    generateSupabaseId(activeClient)
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -151,6 +169,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
   }
 
   const addSystem = (name: string, industria?: Industria, formulaBancada?: FormulaBancada, formulaProducao?: FormulaProducao) => {
+    const supabaseId = generateSupabaseId(name)
     const newSystem: ClientSystem = {
       id: `system-${Date.now()}`,
       name,
@@ -158,6 +177,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       industria,
       formulaBancada,
       formulaProducao,
+      supabaseId,
     }
     // Populate the new industry's store with demo data
     initIndustryWithDemoData(newSystem.id)
@@ -222,6 +242,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
         switchSystem,
         deleteSystem,
         activeSystemId,
+        activeSupabaseId,
         industriaSelecionada,
         setIndustriaSelecionada,
         hasExampleData,
