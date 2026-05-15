@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown, Settings, Database, Loader2 } from "lucide-react"
-import { formulas as formulasExemplo, proporcoes, ingredientesRegistro } from "@/lib/formulation-data"
+import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown, Settings, Loader2 } from "lucide-react"
+import { proporcoes, ingredientesRegistro } from "@/lib/formulation-data"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
 import { useClient } from "@/contexts/client-context"
 import { createClient } from "@/lib/supabase/client"
@@ -55,7 +55,6 @@ export function ProductionCalculator() {
   // Estados de dados
   const [formulacoesDB, setFormulacoesDB] = useState<FormulacaoCompleta[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [hasCustomData, setHasCustomData] = useState(false)
   
   // Estados da calculadora
   const [selectedProduto, setSelectedProduto] = useState<string>("")
@@ -96,21 +95,17 @@ export function ProductionCalculator() {
         )
 
         setFormulacoesDB(formulacoesCompletas)
-        setHasCustomData(true)
         // Selecionar primeiro produto se nenhum selecionado
         if (!selectedProduto && formulacoesCompletas.length > 0) {
           setSelectedProduto(formulacoesCompletas[0].produto)
         }
       } else {
-        setHasCustomData(false)
-        // Usar dados de exemplo se não há dados customizados
-        if (!selectedProduto) {
-          setSelectedProduto(formulasExemplo[11].fruta) // Caju como padrão
-        }
+        setFormulacoesDB([])
+        setSelectedProduto("")
       }
     } catch (error) {
       console.error("[v0] Erro ao carregar formulações:", error)
-      setHasCustomData(false)
+      setFormulacoesDB([])
     } finally {
       setIsLoading(false)
     }
@@ -120,16 +115,16 @@ export function ProductionCalculator() {
     loadFormulacoes()
   }, [loadFormulacoes])
 
-  // Formulas disponíveis (DB ou exemplo)
+  // Formulas disponíveis (apenas do Supabase)
   const formulasDisponiveis = useMemo(() => {
-    if (hasCustomData && formulacoesDB.length > 0) {
+    if (formulacoesDB.length > 0) {
       return formulacoesDB.map(convertToInternalFormat)
     }
-    return formulasExemplo
-  }, [hasCustomData, formulacoesDB])
+    return []
+  }, [formulacoesDB])
 
   const currentFormula = useMemo(
-    () => formulasDisponiveis.find((f) => f.fruta === selectedProduto) || formulasDisponiveis[0],
+    () => formulasDisponiveis.find((f) => f.fruta === selectedProduto) || null,
     [selectedProduto, formulasDisponiveis]
   )
 
@@ -356,15 +351,7 @@ export function ProductionCalculator() {
 
   return (
     <div className="space-y-6">
-      {/* Banner informativo sobre fonte de dados */}
-      {!hasCustomData && (
-        <Alert>
-          <Database className="h-4 w-4" />
-          <AlertDescription>
-            Usando dados de exemplo. Vá na aba <strong>Configurar</strong> para importar suas próprias formulações.
-          </AlertDescription>
-        </Alert>
-      )}
+
 
       {/* Controles superiores */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -374,20 +361,26 @@ export function ProductionCalculator() {
               <FlaskConical className="h-4 w-4" /> Produto / Receita
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <Select value={selectedProduto} onValueChange={setSelectedProduto}>
-              <SelectTrigger className="bg-secondary border-border">
-                <SelectValue placeholder="Selecione um produto" />
-              </SelectTrigger>
-              <SelectContent>
-                {formulasDisponiveis.map((f) => (
-                  <SelectItem key={f.fruta} value={f.fruta}>
-                    {f.fruta} — {f.tipoProduto}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
+  <CardContent>
+  {formulasDisponiveis.length > 0 ? (
+    <Select value={selectedProduto} onValueChange={setSelectedProduto}>
+      <SelectTrigger className="bg-secondary border-border">
+        <SelectValue placeholder="Selecione um produto" />
+      </SelectTrigger>
+      <SelectContent>
+        {formulasDisponiveis.map((f) => (
+          <SelectItem key={f.fruta} value={f.fruta}>
+            {f.fruta} — {f.tipoProduto}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  ) : (
+    <p className="text-sm text-muted-foreground">
+      Nenhuma formulação cadastrada. Use a aba &quot;Configurar&quot; para importar dados.
+    </p>
+  )}
+  </CardContent>
         </Card>
 
         <Card className="border-border bg-card">
@@ -828,14 +821,14 @@ export function ProductionCalculator() {
                   Suas Formulações
                 </CardTitle>
                 <CardDescription>
-                  {hasCustomData 
-                    ? `Você tem ${formulacoesDB.length} formulação(ões) cadastrada(s) para ${activeClient}.`
-                    : `Nenhuma formulação cadastrada para ${activeClient}. Importe uma planilha abaixo.`
-                  }
+{formulacoesDB.length > 0
+  ? `Você tem ${formulacoesDB.length} formulação(ões) cadastrada(s) para ${activeClient}.`
+  : `Nenhuma formulação cadastrada para ${activeClient}. Importe uma planilha abaixo.`
+  }
                 </CardDescription>
               </CardHeader>
-              {hasCustomData && (
-                <CardContent>
+{formulacoesDB.length > 0 && (
+  <CardContent>
                   <div className="rounded-lg border border-border overflow-hidden">
                     <Table>
                       <TableHeader>
