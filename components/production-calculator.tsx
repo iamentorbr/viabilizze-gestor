@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown, Settings, Loader2 } from "lucide-react"
+import { Calculator, Beaker, Droplets, FlaskConical, Scale, FileText, Info, FileDown, Settings, Database, Loader2 } from "lucide-react"
 import { proporcoes, ingredientesRegistro } from "@/lib/formulation-data"
 import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
 import { useClient } from "@/contexts/client-context"
