@@ -95,6 +95,32 @@ export interface OrdemCompleta extends OrdemProducao {
   formulacao?: Formulacao
 }
 
+// Tipos para Análises de Qualidade
+export interface AnaliseQualidade {
+  id: string
+  empresa_id: string
+  codigo: string
+  ordem_id?: string
+  ordem_codigo?: string
+  produto: string
+  brix_medido?: number
+  brix_min?: number
+  brix_max?: number
+  ph_medido?: number
+  ph_min?: number
+  ph_max?: number
+  acidez_medida?: number
+  acidez_min?: number
+  acidez_max?: number
+  resultado: 'Aguardando' | 'Aprovado' | 'Ajuste' | 'Reprovado'
+  analista?: string
+  observacao?: string
+  data_analise: string
+  created_at: string
+}
+
+export type AnaliseQualidadeInsert = Omit<AnaliseQualidade, 'id' | 'created_at'>
+
 // Tipo para upload de planilha
 export interface PlanilhaRow {
   produto: string
