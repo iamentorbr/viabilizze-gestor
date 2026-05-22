@@ -3,7 +3,7 @@
 import Link from "next/link"
 import Image from "next/image"
 import { useState } from "react"
-import { Factory, Briefcase, ArrowRight, BookOpen, ChevronRight, RotateCcw, Plus, Building2, Trash2, Check, FlaskConical, X } from "lucide-react"
+import { Factory, ArrowRight, ChevronRight, RotateCcw, Plus, Building2, Trash2, Check, FlaskConical, X } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,24 +21,6 @@ const mainOptions = [
     hoverColor: "hover:border-emerald-500/50 hover:shadow-emerald-500/10",
     iconBg: "bg-emerald-500/10",
     iconColor: "text-emerald-500",
-  },
-  {
-    title: "Serviços Prestados",
-    description: "Gestão de serviços de consultoria, assessoria e suporte técnico para indústrias de alimentos e bebidas.",
-    href: "/servicos",
-    icon: Briefcase,
-    hoverColor: "hover:border-blue-500/50 hover:shadow-blue-500/10",
-    iconBg: "bg-blue-500/10",
-    iconColor: "text-blue-500",
-  },
-  {
-    title: "Legislação",
-    description: "Leis e normas vigentes para bebidas e vinhos. Acesso direto à biblioteca de normas do MAPA/DIPOV.",
-    href: "/legislacao",
-    icon: BookOpen,
-    hoverColor: "hover:border-rose-500/50 hover:shadow-rose-500/10",
-    iconBg: "bg-rose-500/10",
-    iconColor: "text-rose-500",
   },
 ]
 

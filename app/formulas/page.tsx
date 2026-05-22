@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FlaskConical, Plus, Edit, Trash2, Eye, Upload, Search, FileSpreadsheet, AlertCircle, Loader2 } from "lucide-react"
 import { useClient } from "@/contexts/client-context"
 import { createClient } from "@/lib/supabase/client"
-import { Formulacao, Insumo, FormulacaoCompleta } from "@/lib/types/calculadora"
+import { Formulacao, FormulacaoItem, FormulacaoCompleta } from "@/lib/types/calculadora"
 import { PlanilhaUpload } from "@/components/planilha-upload"
 import { toast } from "sonner"
 
@@ -34,34 +34,48 @@ export default function FormulasPage() {
     const supabase = createClient()
     
     try {
-      // Buscar formulações da empresa
+      // Buscar a indústria pelo slug
+      const { data: industria, error: indError } = await supabase
+        .from("industrias")
+        .select("id")
+        .eq("slug", activeSupabaseId)
+        .single()
+
+      if (indError || !industria) {
+        setFormulacoes([])
+        setLoading(false)
+        return
+      }
+
+      // Buscar formulações da indústria
       const { data: formulas, error: formulasError } = await supabase
         .from("formulacoes")
         .select("*")
-        .eq("empresa_id", activeSupabaseId)
-        .order("produto")
+        .eq("industria_id", industria.id)
+        .eq("ativo", true)
+        .order("nome")
 
       if (formulasError) throw formulasError
 
-      // Buscar insumos de todas as formulações
+      // Buscar itens de todas as formulações
       const formulaIds = formulas?.map(f => f.id) || []
       
-      let insumos: Insumo[] = []
+      let itens: FormulacaoItem[] = []
       if (formulaIds.length > 0) {
-        const { data: insumosData, error: insumosError } = await supabase
-          .from("insumos")
+        const { data: itensData, error: itensError } = await supabase
+          .from("formulacao_itens")
           .select("*")
           .in("formulacao_id", formulaIds)
-          .order("nome")
+          .order("ordem_adicao")
 
-        if (insumosError) throw insumosError
-        insumos = insumosData || []
+        if (itensError) throw itensError
+        itens = itensData || []
       }
 
-      // Combinar formulações com seus insumos
+      // Combinar formulações com seus itens
       const formulacoesCompletas: FormulacaoCompleta[] = (formulas || []).map(f => ({
         ...f,
-        insumos: insumos.filter(i => i.formulacao_id === f.id)
+        itens: itens.filter(i => i.formulacao_id === f.id)
       }))
 
       setFormulacoes(formulacoesCompletas)
@@ -95,7 +109,7 @@ export default function FormulasPage() {
   }
 
   const formulacoesFiltradas = formulacoes.filter(f =>
-    f.produto.toLowerCase().includes(searchTerm.toLowerCase())
+    f.nome.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const handleUploadSuccess = () => {
@@ -191,7 +205,7 @@ export default function FormulasPage() {
                           <FlaskConical className="h-5 w-5 text-primary" />
                         </div>
                         <div>
-                          <CardTitle className="text-base">{formulacao.produto}</CardTitle>
+                          <CardTitle className="text-base">{formulacao.nome}</CardTitle>
                           <p className="text-xs text-muted-foreground capitalize">
                             {formulacao.categoria || "Néctar"}
                           </p>
@@ -207,7 +221,7 @@ export default function FormulasPage() {
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Insumos</p>
-                          <p className="font-medium">{formulacao.insumos.length} itens</p>
+                          <p className="font-medium">{formulacao.itens.length} itens</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Brix</p>
@@ -216,10 +230,10 @@ export default function FormulasPage() {
                           </p>
                         </div>
                       </div>
-                      {formulacao.perc_suco_minimo_legal && (
+                      {formulacao.teor_polpa_minimo && (
                         <div className="text-sm">
                           <p className="text-muted-foreground">Suco Mínimo Legal</p>
-                          <p className="font-medium">{formulacao.perc_suco_minimo_legal}%</p>
+                          <p className="font-medium">{formulacao.teor_polpa_minimo}%</p>
                         </div>
                       )}
                       <div className="flex gap-2 pt-2">
@@ -261,7 +275,7 @@ export default function FormulasPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FlaskConical className="h-5 w-5 text-primary" />
-                {selectedFormulacao?.produto}
+                {selectedFormulacao?.nome}
               </DialogTitle>
               <DialogDescription>
                 Detalhes da formulação e lista de insumos
@@ -287,22 +301,20 @@ export default function FormulasPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedFormulacao.insumos.map((insumo) => (
-                        <TableRow key={insumo.id}>
+                      {selectedFormulacao.itens.map((item) => (
+                        <TableRow key={item.id}>
                           <TableCell className="font-medium">
-                            {insumo.nome}
-                            {insumo.is_agua_qsp && (
+                            {item.nome_item}
+                            {item.tipo === "agua" && (
                               <Badge variant="outline" className="ml-2 text-xs">QSP</Badge>
                             )}
                           </TableCell>
-                          <TableCell className="capitalize">{insumo.tipo}</TableCell>
+                          <TableCell className="capitalize">{item.tipo}</TableCell>
                           <TableCell className="text-right font-mono">
-                            {insumo.qtd_base_por_1000L.toFixed(3)}
+                            {item.quantidade_por_1000L.toFixed(3)}
                           </TableCell>
-                          <TableCell>{insumo.unidade}</TableCell>
-                          <TableCell className="text-right font-mono">
-                            {insumo.brix_insumo > 0 ? `${insumo.brix_insumo}°` : "-"}
-                          </TableCell>
+                          <TableCell>{item.unidade}</TableCell>
+                          <TableCell className="text-right font-mono">-</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -381,7 +393,7 @@ export default function FormulasPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-muted-foreground">Suco Mínimo Legal</Label>
-                      <p className="font-medium">{selectedFormulacao.perc_suco_minimo_legal}%</p>
+                      <p className="font-medium">{selectedFormulacao.teor_polpa_minimo}%</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Norma de Referência</Label>
