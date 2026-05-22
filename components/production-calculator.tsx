@@ -15,14 +15,14 @@ import { drawPdfHeader, drawPdfFooter } from "@/lib/pdf-logo"
 import { useClient } from "@/contexts/client-context"
 import { createClient } from "@/lib/supabase/client"
 import { PlanilhaUpload } from "@/components/planilha-upload"
-import type { Formulacao, Insumo, FormulacaoCompleta } from "@/lib/types/calculadora"
+import type { Formulacao, FormulacaoItem, FormulacaoCompleta } from "@/lib/types/calculadora"
 
 // Converte dados do Supabase para o formato interno
 function convertToInternalFormat(formulacao: FormulacaoCompleta) {
   return {
-    fruta: formulacao.produto,
+    fruta: formulacao.nome,
     tipoProduto: formulacao.categoria === "nectar" ? "Néctar Tropical" : "Bebida",
-    observacoes: formulacao.observacao || "",
+    observacoes: formulacao.observacoes || "",
     specifications: {
       brixMin: formulacao.brix_min || 10,
       brixMax: formulacao.brix_max || 14,
@@ -30,20 +30,15 @@ function convertToInternalFormat(formulacao: FormulacaoCompleta) {
       acidezMax: formulacao.acidez_max || 0.5,
       phMin: formulacao.ph_min || 3.0,
       phMax: formulacao.ph_max || 4.5,
-      polpaMin: formulacao.perc_suco_minimo_legal || 10,
+      polpaMin: formulacao.teor_polpa_minimo || 10,
       legislacao: formulacao.norma_referencia || "IN 37/2018 MAPA",
     },
-    ingredients: formulacao.insumos.map((ins) => ({
-      name: ins.nome,
-      per1000L: ins.qtd_base_por_1000L,
-      unit: ins.unidade,
-      obs: ins.tipo !== "aditivo" ? ins.tipo : undefined,
-      isQSP: ins.is_agua_qsp,
-      brix: ins.brix_insumo,
-      fatorReconstituicao: ins.fator_reconstituicao,
-      densidade: ins.densidade_kg_L,
-      acidez: ins.acidez_natural,
-      preco: ins.preco_unitario_kg,
+    ingredients: formulacao.itens.map((item) => ({
+      name: item.nome_item,
+      per1000L: item.quantidade_por_1000L,
+      unit: item.unidade,
+      obs: item.tipo !== "insumo" ? item.tipo : undefined,
+      isQSP: item.tipo === "agua",
     })),
   }
 }
@@ -69,27 +64,42 @@ export function ProductionCalculator() {
     
     setIsLoading(true)
     try {
+      // Primeiro buscar a indústria pelo slug
+      const { data: industria, error: indError } = await supabase
+        .from("industrias")
+        .select("id")
+        .eq("slug", activeSupabaseId)
+        .single()
+
+      if (indError || !industria) {
+        setFormulacoesDB([])
+        setSelectedProduto("")
+        setIsLoading(false)
+        return
+      }
+
       const { data: formData, error: formError } = await supabase
         .from("formulacoes")
         .select("*")
-        .eq("empresa_id", activeSupabaseId)
-        .order("produto")
+        .eq("industria_id", industria.id)
+        .eq("ativo", true)
+        .order("nome")
 
       if (formError) throw formError
 
       if (formData && formData.length > 0) {
-        // Carregar insumos para cada formulação
+        // Carregar itens para cada formulação
         const formulacoesCompletas: FormulacaoCompleta[] = await Promise.all(
           formData.map(async (form: Formulacao) => {
-            const { data: insumosData } = await supabase
-              .from("insumos")
+            const { data: itensData } = await supabase
+              .from("formulacao_itens")
               .select("*")
               .eq("formulacao_id", form.id)
-              .order("nome")
+              .order("ordem_adicao")
             
             return {
               ...form,
-              insumos: (insumosData as Insumo[]) || [],
+              itens: (itensData as FormulacaoItem[]) || [],
             }
           })
         )
@@ -97,7 +107,7 @@ export function ProductionCalculator() {
         setFormulacoesDB(formulacoesCompletas)
         // Selecionar primeiro produto se nenhum selecionado
         if (!selectedProduto && formulacoesCompletas.length > 0) {
-          setSelectedProduto(formulacoesCompletas[0].produto)
+          setSelectedProduto(formulacoesCompletas[0].nome)
         }
       } else {
         setFormulacoesDB([])
@@ -843,13 +853,13 @@ export function ProductionCalculator() {
                       <TableBody>
                         {formulacoesDB.map((form) => (
                           <TableRow key={form.id} className="hover:bg-secondary/30">
-                            <TableCell className="font-medium">{form.produto}</TableCell>
-                            <TableCell className="text-center">{form.insumos.length}</TableCell>
+                            <TableCell className="font-medium">{form.nome}</TableCell>
+                            <TableCell className="text-center">{form.itens?.length || 0}</TableCell>
                             <TableCell className="text-center font-mono">
                               {form.brix_min || "—"} - {form.brix_max || "—"}
                             </TableCell>
                             <TableCell className="text-center">
-                              <Badge variant="outline">{form.perc_suco_minimo_legal || 10}%</Badge>
+                              <Badge variant="outline">{form.teor_polpa_minimo || 10}%</Badge>
                             </TableCell>
                           </TableRow>
                         ))}

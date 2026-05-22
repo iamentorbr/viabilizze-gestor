@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Upload, FileSpreadsheet, Check, AlertTriangle, Loader2, Download, Trash2 } from "lucide-react"
-import type { PlanilhaRow, FormulacaoInsert, InsumoInsert } from "@/lib/types/calculadora"
+import type { PlanilhaRow, FormulacaoInsert, FormulacaoItemInsert } from "@/lib/types/calculadora"
 
 interface UploadResult {
   success: boolean
@@ -56,7 +56,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
             produto: String(row["produto"] || row["Produto"] || row["PRODUTO"] || ""),
             insumo: String(row["insumo"] || row["Insumo"] || row["INSUMO"] || row["ingrediente"] || row["Ingrediente"] || ""),
             tipo: String(row["tipo"] || row["Tipo"] || row["TIPO"] || "aditivo"),
-            qtd_base_por_1000L: Number(row["qtd_base_por_1000L"] || row["quantidade"] || row["Quantidade"] || row["qtd"] || 0),
+            quantidade_por_1000L: Number(row["quantidade_por_1000L"] || row["quantidade_por_1000L"] || row["quantidade"] || row["Quantidade"] || row["qtd"] || 0),
             unidade: String(row["unidade"] || row["Unidade"] || row["UNIDADE"] || "kg"),
             brix_insumo: Number(row["brix_insumo"] || row["brix"] || row["Brix"] || 0),
             fator_reconstituicao: Number(row["fator_reconstituicao"] || row["fator"] || 0),
@@ -74,7 +74,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
           }))
 
           // Filtrar linhas vazias
-          const validRows = rows.filter((row) => row.produto && row.insumo && row.qtd_base_por_1000L > 0)
+          const validRows = rows.filter((row) => row.produto && row.insumo && row.quantidade_por_1000L > 0)
           resolve(validRows)
         } catch (error) {
           reject(error)
@@ -109,7 +109,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
       if (rows.length === 0) {
         setResult({ 
           success: false, 
-          message: "Nenhum dado válido encontrado. Verifique se a planilha contém as colunas: produto, insumo, qtd_base_por_1000L" 
+          message: "Nenhum dado válido encontrado. Verifique se a planilha contém as colunas: produto, insumo, quantidade_por_1000L" 
         })
         setIsProcessing(false)
         return
@@ -157,6 +157,31 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
   }
 
   const processRows = async (supabase: ReturnType<typeof createClient>, rows: PlanilhaRow[]) => {
+    // Primeiro, buscar ou criar a indústria
+    let industria_id: string
+
+    const { data: existingIndustria } = await supabase
+      .from("industrias")
+      .select("id")
+      .eq("slug", activeSupabaseId)
+      .single()
+
+    if (existingIndustria) {
+      industria_id = existingIndustria.id
+    } else {
+      // Criar indústria
+      const { data: newIndustria, error: indError } = await supabase
+        .from("industrias")
+        .insert({ slug: activeSupabaseId, nome: activeClient })
+        .select("id")
+        .single()
+
+      if (indError || !newIndustria) {
+        throw new Error("Erro ao criar indústria")
+      }
+      industria_id = newIndustria.id
+    }
+
     // Agrupar por produto
     const produtosMap = new Map<string, PlanilhaRow[]>()
     rows.forEach((row) => {
@@ -166,16 +191,17 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
     })
 
     let formulacoesCount = 0
-    let insumosCount = 0
+    let itensCount = 0
 
-    for (const [produto, insumos] of produtosMap) {
-      // Pegar parâmetros do primeiro insumo (que pode ter os dados do produto)
-      const firstRow = insumos[0]
+    for (const [produto, itens] of produtosMap) {
+      // Pegar parâmetros do primeiro item (que pode ter os dados do produto)
+      const firstRow = itens[0]
       
       // Inserir ou atualizar formulação
-      const formulacaoData: FormulacaoInsert = {
-        empresa_id: activeSupabaseId,
-        produto,
+      const formulacaoData = {
+        industria_id,
+        codigo: produto.substring(0, 20).toUpperCase().replace(/\s+/g, "-"),
+        nome: produto,
         categoria: "nectar",
         brix_min: firstRow.brix_min,
         brix_ideal: firstRow.brix_ideal,
@@ -183,12 +209,15 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
         ph_min: firstRow.ph_min,
         ph_ideal: firstRow.ph_ideal,
         ph_max: firstRow.ph_max,
-        perc_suco_minimo_legal: firstRow.perc_suco_minimo_legal || 10,
+        teor_polpa_minimo: firstRow.teor_polpa_minimo || 10,
+        ativo: true,
+        versao: 1,
+        rendimento_esperado: 100,
       }
 
       const { data: formulacao, error: formError } = await supabase
         .from("formulacoes")
-        .upsert(formulacaoData, { onConflict: "empresa_id,produto" })
+        .upsert(formulacaoData, { onConflict: "industria_id,codigo" })
         .select("id")
         .single()
 
@@ -199,33 +228,28 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
 
       formulacoesCount++
 
-      // Deletar insumos antigos desta formulação
+      // Deletar itens antigos desta formulação
       await supabase
-        .from("insumos")
+        .from("formulacao_itens")
         .delete()
         .eq("formulacao_id", formulacao.id)
 
-      // Inserir novos insumos
-      const insumosData: InsumoInsert[] = insumos.map((row) => ({
+      // Inserir novos itens
+      const itensData: FormulacaoItemInsert[] = itens.map((row, idx) => ({
         formulacao_id: formulacao.id,
-        nome: row.insumo,
-        tipo: row.tipo || "aditivo",
-        qtd_base_por_1000L: row.qtd_base_por_1000L,
+        nome_item: row.insumo,
+        tipo: row.tipo || "insumo",
+        quantidade_por_1000L: row.quantidade_por_1000L,
         unidade: row.unidade || "kg",
-        brix_insumo: row.brix_insumo || 0,
-        fator_reconstituicao: row.fator_reconstituicao || 0,
-        densidade_kg_L: row.densidade_kg_L || 1.0,
-        acidez_natural: row.acidez_natural || 0,
-        preco_unitario_kg: row.preco_unitario_kg,
-        is_agua_qsp: row.is_agua_qsp || false,
+        ordem_adicao: idx + 1,
       }))
 
-      const { error: insError } = await supabase
-        .from("insumos")
-        .insert(insumosData)
+      const { error: itensError } = await supabase
+        .from("formulacao_itens")
+        .insert(itensData)
 
-      if (!insError) {
-        insumosCount += insumosData.length
+      if (!itensError) {
+        itensCount += itensData.length
       }
     }
 
@@ -233,7 +257,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
       success: true,
       message: `Upload para "${activeClient}" concluído com sucesso!`,
       formulacoesCount,
-      insumosCount,
+      insumosCount: itensCount,
     })
     setPreview([])
     setAllRows([])
@@ -254,7 +278,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
         produto: "Néctar de Manga",
         insumo: "Polpa de Manga Concentrada",
         tipo: "polpa",
-        qtd_base_por_1000L: 120,
+        quantidade_por_1000L: 120,
         unidade: "kg",
         brix_insumo: 28,
         fator_reconstituicao: 3.5,
@@ -271,7 +295,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
         produto: "Néctar de Manga",
         insumo: "Açúcar Cristal",
         tipo: "aditivo",
-        qtd_base_por_1000L: 80,
+        quantidade_por_1000L: 80,
         unidade: "kg",
         brix_insumo: 100,
         fator_reconstituicao: 0,
@@ -284,7 +308,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
         produto: "Néctar de Manga",
         insumo: "Água QSP",
         tipo: "agua",
-        qtd_base_por_1000L: 800,
+        quantidade_por_1000L: 800,
         unidade: "L",
         brix_insumo: 0,
         fator_reconstituicao: 0,
@@ -407,7 +431,7 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
                       <TableCell>
                         <Badge variant="outline">{row.tipo}</Badge>
                       </TableCell>
-                      <TableCell className="text-right">{row.qtd_base_por_1000L}</TableCell>
+                      <TableCell className="text-right">{row.quantidade_por_1000L}</TableCell>
                       <TableCell>{row.unidade}</TableCell>
                     </TableRow>
                   ))}
