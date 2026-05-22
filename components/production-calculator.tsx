@@ -168,11 +168,12 @@ export function ProductionCalculator() {
   }, [brixConcentradoInput, currentProporcao, volumeFinal, currentFormula])
 
   const idealSpecs = useMemo(() => {
-    if (!currentFormula) return { brix: "0", acidez: "0", ph: "0" }
+    if (!currentFormula?.specifications) return { brix: "0", acidez: "0", ph: "0" }
+    const specs = currentFormula.specifications
     return {
-      brix: (((currentFormula.specifications.brixMin + currentFormula.specifications.brixMax) / 2)).toFixed(2),
-      acidez: (((currentFormula.specifications.acidezMin + currentFormula.specifications.acidezMax) / 2)).toFixed(3),
-      ph: (((currentFormula.specifications.phMin + currentFormula.specifications.phMax) / 2)).toFixed(2),
+      brix: (((specs.brixMin ?? 0) + (specs.brixMax ?? 0)) / 2).toFixed(2),
+      acidez: (((specs.acidezMin ?? 0) + (specs.acidezMax ?? 0)) / 2).toFixed(3),
+      ph: (((specs.phMin ?? 0) + (specs.phMax ?? 0)) / 2).toFixed(2),
     }
   }, [currentFormula])
 
