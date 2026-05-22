@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Upload, FileSpreadsheet, Check, AlertTriangle, Loader2, Download, Trash2 } from "lucide-react"
+import { Upload, FileSpreadsheet, Check, AlertTriangle, Loader2, Trash2 } from "lucide-react"
 import type { PlanilhaRow, FormulacaoInsert, FormulacaoItemInsert } from "@/lib/types/calculadora"
 
 interface UploadResult {
@@ -272,58 +272,6 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
     setResult(null)
   }
 
-  const downloadTemplate = () => {
-    const template = [
-      {
-        produto: "Néctar de Manga",
-        insumo: "Polpa de Manga Concentrada",
-        tipo: "polpa",
-        quantidade_por_1000L: 120,
-        unidade: "kg",
-        brix_insumo: 28,
-        fator_reconstituicao: 3.5,
-        densidade_kg_L: 1.05,
-        acidez_natural: 0.3,
-        preco_unitario_kg: 15.5,
-        is_agua_qsp: false,
-        brix_min: 10,
-        brix_ideal: 11,
-        brix_max: 12,
-        perc_suco_minimo_legal: 10,
-      },
-      {
-        produto: "Néctar de Manga",
-        insumo: "Açúcar Cristal",
-        tipo: "aditivo",
-        quantidade_por_1000L: 80,
-        unidade: "kg",
-        brix_insumo: 100,
-        fator_reconstituicao: 0,
-        densidade_kg_L: 1.0,
-        acidez_natural: 0,
-        preco_unitario_kg: 4.5,
-        is_agua_qsp: false,
-      },
-      {
-        produto: "Néctar de Manga",
-        insumo: "Água QSP",
-        tipo: "agua",
-        quantidade_por_1000L: 800,
-        unidade: "L",
-        brix_insumo: 0,
-        fator_reconstituicao: 0,
-        densidade_kg_L: 1.0,
-        acidez_natural: 0,
-        is_agua_qsp: true,
-      },
-    ]
-
-    const ws = XLSX.utils.json_to_sheet(template)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Formulacoes")
-    XLSX.writeFile(wb, "modelo_formulacoes.xlsx")
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -334,16 +282,12 @@ export function PlanilhaUpload({ onUploadComplete }: { onUploadComplete?: () => 
               Upload de Formulações
             </CardTitle>
             <CardDescription>
-              Importe suas formulações a partir de uma planilha Excel ou CSV
+              Importe suas formulações a partir de uma planilha Excel ou CSV. O sistema identifica automaticamente as colunas: produto, insumo, quantidade, tipo, unidade.
             </CardDescription>
             <Badge variant="outline" className="mt-2 text-primary border-primary">
               Destino: {activeClient}
             </Badge>
           </div>
-          <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2">
-            <Download className="h-4 w-4" />
-            Baixar Modelo
-          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
