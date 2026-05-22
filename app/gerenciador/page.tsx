@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState, useEffect, useCallback } from "react"
 import {
   Calculator,
   LayoutDashboard,
@@ -22,6 +23,14 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useClient } from "@/contexts/client-context"
+import { createClient } from "@/lib/supabase/client"
+
+interface Stats {
+  ordensAtivas: number
+  itensEstoque: number
+  formulasCadastradas: number
+  taxaAprovacao: number
+}
 
 const modules = [
   {
@@ -159,7 +168,81 @@ const modules = [
 ]
 
 export default function HomePage() {
-  const { activeClient } = useClient()
+  const { activeClient, activeSupabaseId } = useClient()
+  const [stats, setStats] = useState<Stats>({
+    ordensAtivas: 0,
+    itensEstoque: 0,
+    formulasCadastradas: 0,
+    taxaAprovacao: 0,
+  })
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
+
+  const loadStats = useCallback(async () => {
+    if (!activeSupabaseId) {
+      setStats({ ordensAtivas: 0, itensEstoque: 0, formulasCadastradas: 0, taxaAprovacao: 0 })
+      setLoading(false)
+      return
+    }
+
+    try {
+      // Buscar indústria pelo slug
+      const { data: industria } = await supabase
+        .from("industrias")
+        .select("id")
+        .eq("slug", activeSupabaseId)
+        .single()
+
+      if (!industria) {
+        setStats({ ordensAtivas: 0, itensEstoque: 0, formulasCadastradas: 0, taxaAprovacao: 0 })
+        setLoading(false)
+        return
+      }
+
+      // Buscar estatísticas em paralelo
+      const [ordensRes, materiasRes, formulasRes, qualidadeRes] = await Promise.all([
+        supabase
+          .from("ordens_producao")
+          .select("id", { count: "exact" })
+          .eq("industria_id", industria.id)
+          .in("status", ["pendente", "em_producao"]),
+        supabase
+          .from("materias_primas")
+          .select("id", { count: "exact" })
+          .eq("industria_id", industria.id)
+          .eq("ativo", true),
+        supabase
+          .from("formulacoes")
+          .select("id", { count: "exact" })
+          .eq("industria_id", industria.id)
+          .eq("ativo", true),
+        supabase
+          .from("controle_qualidade")
+          .select("resultado")
+          .eq("industria_id", industria.id),
+      ])
+
+      // Calcular taxa de aprovação
+      const analises = qualidadeRes.data || []
+      const aprovadas = analises.filter(a => a.resultado === "aprovado" || a.resultado === "aprovado_restricao").length
+      const taxaAprovacao = analises.length > 0 ? Math.round((aprovadas / analises.length) * 100) : 0
+
+      setStats({
+        ordensAtivas: ordensRes.count || 0,
+        itensEstoque: materiasRes.count || 0,
+        formulasCadastradas: formulasRes.count || 0,
+        taxaAprovacao,
+      })
+    } catch (error) {
+      console.error("Erro ao carregar estatísticas:", error)
+    } finally {
+      setLoading(false)
+    }
+  }, [activeSupabaseId, supabase])
+
+  useEffect(() => {
+    loadStats()
+  }, [loadStats])
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,7 +288,7 @@ export default function HomePage() {
                 <ClipboardList className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">12</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : stats.ordensAtivas}</p>
                 <p className="text-xs text-muted-foreground">Ordens Ativas</p>
               </div>
             </CardContent>
@@ -216,7 +299,7 @@ export default function HomePage() {
                 <Package className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">45</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : stats.itensEstoque}</p>
                 <p className="text-xs text-muted-foreground">Itens em Estoque</p>
               </div>
             </CardContent>
@@ -227,7 +310,7 @@ export default function HomePage() {
                 <FlaskConical className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">8</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : stats.formulasCadastradas}</p>
                 <p className="text-xs text-muted-foreground">Fórmulas Cadastradas</p>
               </div>
             </CardContent>
@@ -238,7 +321,7 @@ export default function HomePage() {
                 <Beaker className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">98%</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${stats.taxaAprovacao}%`}</p>
                 <p className="text-xs text-muted-foreground">Taxa de Aprovação</p>
               </div>
             </CardContent>
