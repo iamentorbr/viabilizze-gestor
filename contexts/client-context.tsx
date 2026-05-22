@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
-import { initIndustryWithDemoData, clearExampleData as clearExampleStore, deleteIndustryData, getIndustryData } from "@/lib/industry-store"
+import { clearExampleData as clearExampleStore, deleteIndustryData, getIndustryData } from "@/lib/industry-store"
 
 export interface Industria {
   id: string
@@ -88,11 +88,9 @@ function saveSystems(systems: ClientSystem[]) {
 }
 
 export function ClientProvider({ children }: { children: ReactNode }) {
-  const [activeClient, setActiveClientState] = useState("Empresa Demonstração")
-  const [activeSystemId, setActiveSystemId] = useState("default")
-  const [systems, setSystems] = useState<ClientSystem[]>([
-    { id: "default", name: "Empresa Demonstração", createdAt: new Date().toISOString() },
-  ])
+  const [activeClient, setActiveClientState] = useState("")
+  const [activeSystemId, setActiveSystemId] = useState("")
+  const [systems, setSystems] = useState<ClientSystem[]>([])
   const [hasExampleData, setHasExampleData] = useState(false)
 
   // Derived: current system's industry
@@ -115,7 +113,7 @@ export function ClientProvider({ children }: { children: ReactNode }) {
 
     let initialSystems: ClientSystem[] = savedSystems.length
       ? savedSystems
-      : [{ id: "default", name: "Empresa Demonstração", createdAt: new Date().toISOString() }]
+      : []
 
     if (legacyIndustria && initialSystems.length > 0) {
       try {
@@ -132,19 +130,8 @@ export function ClientProvider({ children }: { children: ReactNode }) {
     setSystems(initialSystems)
     if (savedClient)   setActiveClientState(savedClient)
 
-    const resolvedSystemId = savedSystemId ?? "default"
+    const resolvedSystemId = savedSystemId ?? ""
     if (savedSystemId) setActiveSystemId(savedSystemId)
-
-    // Init store for default system if it has never been set up
-    const existingData = getIndustryData(resolvedSystemId)
-    if (!existingData.hasExampleData &&
-        existingData.produtos.length === 0 &&
-        resolvedSystemId === "default") {
-      initIndustryWithDemoData(resolvedSystemId)
-      setHasExampleData(true)
-    } else {
-      setHasExampleData(existingData.hasExampleData)
-    }
   }, [])
 
   // setIndustriaSelecionada — writes into the active system
@@ -179,9 +166,6 @@ export function ClientProvider({ children }: { children: ReactNode }) {
       formulaProducao,
       supabaseId,
     }
-    // Populate the new industry's store with demo data
-    initIndustryWithDemoData(newSystem.id)
-    setHasExampleData(true)
 
     setSystems((prev) => {
       const updated = [...prev, newSystem]

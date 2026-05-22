@@ -86,7 +86,7 @@ export interface FormulacaoItem {
   materia_prima_id?: string
   nome_item: string
   tipo: string
-  quantidade_por_1000L: number
+  quantidade_por_1000l: number  // lowercase 'l' - Postgres normalizes column names
   unidade: string
   ordem_adicao: number
   observacoes?: string
