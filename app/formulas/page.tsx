@@ -311,7 +311,7 @@ export default function FormulasPage() {
                           </TableCell>
                           <TableCell className="capitalize">{item.tipo}</TableCell>
                           <TableCell className="text-right font-mono">
-                            {item.quantidade_por_1000L.toFixed(3)}
+                            {Number(item.quantidade_por_1000l || 0).toFixed(3)}
                           </TableCell>
                           <TableCell>{item.unidade}</TableCell>
                           <TableCell className="text-right font-mono">-</TableCell>
