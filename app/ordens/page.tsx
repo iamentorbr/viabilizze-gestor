@@ -15,17 +15,21 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   ClipboardList, Plus, Play, CheckCircle, Eye, Search, 
-  Loader2, AlertCircle, Calculator, Trash2
+  Loader2, AlertCircle, Calculator, Trash2, Pause
 } from "lucide-react"
 import { useClient } from "@/contexts/client-context"
 import { createClient } from "@/lib/supabase/client"
-import { Insumo, FormulacaoCompleta, OrdemProducao, OrdemInsumo, OrdemCompleta } from "@/lib/types/calculadora"
+import { FormulacaoItem, FormulacaoCompleta, OrdemProducao, OrdemItem, OrdemCompleta } from "@/lib/types/calculadora"
 import { toast } from "sonner"
+
+type StatusOrdem = OrdemProducao['status']
+type PrioridadeOrdem = OrdemProducao['prioridade']
 
 export default function OrdensPage() {
   const { activeSupabaseId } = useClient()
   const [ordens, setOrdens] = useState<OrdemCompleta[]>([])
   const [formulacoes, setFormulacoes] = useState<FormulacaoCompleta[]>([])
+  const [industriaId, setIndustriaId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("todos")
@@ -37,69 +41,95 @@ export default function OrdensPage() {
   
   const [novaOrdem, setNovaOrdem] = useState({
     formulacao_id: "",
-    volume_litros: 1000,
+    volume_programado: 1000,
     percentual_producao: 100,
-    prioridade: "Normal" as const,
+    prioridade: "normal" as PrioridadeOrdem,
     data_programada: "",
     operador: "",
-    observacao: ""
+    observacoes: ""
   })
 
+  const supabase = createClient()
+
   const carregarDados = useCallback(async () => {
-    if (!activeSupabaseId) return
+    if (!activeSupabaseId) {
+      setLoading(false)
+      setFormulacoes([])
+      setOrdens([])
+      return
+    }
     
     setLoading(true)
-    const supabase = createClient()
     
     try {
+      // Buscar a indústria pelo slug
+      const { data: industria, error: indError } = await supabase
+        .from("industrias")
+        .select("id")
+        .eq("slug", activeSupabaseId)
+        .single()
+
+      if (indError || !industria) {
+        setFormulacoes([])
+        setOrdens([])
+        setLoading(false)
+        return
+      }
+
+      setIndustriaId(industria.id)
+
+      // Buscar formulações
       const { data: formulasData, error: formulasError } = await supabase
         .from("formulacoes")
         .select("*")
-        .eq("empresa_id", activeSupabaseId)
-        .order("produto")
+        .eq("industria_id", industria.id)
+        .eq("ativo", true)
+        .order("nome")
 
       if (formulasError) throw formulasError
 
       const formulaIds = formulasData?.map(f => f.id) || []
       
-      let insumos: Insumo[] = []
+      let itens: FormulacaoItem[] = []
       if (formulaIds.length > 0) {
-        const { data: insumosData } = await supabase
-          .from("insumos")
+        const { data: itensData } = await supabase
+          .from("formulacao_itens")
           .select("*")
           .in("formulacao_id", formulaIds)
-        insumos = insumosData || []
+          .order("ordem_adicao")
+        itens = itensData || []
       }
 
       const formulacoesCompletas: FormulacaoCompleta[] = (formulasData || []).map(f => ({
         ...f,
-        insumos: insumos.filter(i => i.formulacao_id === f.id)
+        itens: itens.filter(i => i.formulacao_id === f.id)
       }))
 
       setFormulacoes(formulacoesCompletas)
 
+      // Buscar ordens de produção
       const { data: ordensData, error: ordensError } = await supabase
         .from("ordens_producao")
         .select("*")
-        .eq("empresa_id", activeSupabaseId)
+        .eq("industria_id", industria.id)
         .order("created_at", { ascending: false })
 
       if (ordensError) throw ordensError
 
       const ordemIds = ordensData?.map(o => o.id) || []
       
-      let ordemInsumos: OrdemInsumo[] = []
+      let ordemItens: OrdemItem[] = []
       if (ordemIds.length > 0) {
-        const { data: insumosOrdemData } = await supabase
-          .from("ordem_insumos")
+        const { data: itensOrdemData } = await supabase
+          .from("ordem_itens")
           .select("*")
           .in("ordem_id", ordemIds)
-        ordemInsumos = insumosOrdemData || []
+        ordemItens = itensOrdemData || []
       }
 
       const ordensCompletas: OrdemCompleta[] = (ordensData || []).map(o => ({
         ...o,
-        insumos: ordemInsumos.filter(i => i.ordem_id === o.id),
+        itens: ordemItens.filter(i => i.ordem_id === o.id),
         formulacao: formulacoesCompletas.find(f => f.id === o.formulacao_id)
       }))
 
@@ -110,28 +140,26 @@ export default function OrdensPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeSupabaseId])
+  }, [activeSupabaseId, supabase])
 
   useEffect(() => {
     carregarDados()
   }, [carregarDados])
 
-  const calcularInsumos = (formulacao: FormulacaoCompleta, volumeLitros: number, percentualProducao: number) => {
+  const calcularItens = (formulacao: FormulacaoCompleta, volumeLitros: number, percentualProducao: number) => {
     const fator = (volumeLitros / 1000) * (percentualProducao / 100)
     
-    return formulacao.insumos.map(insumo => ({
-      nome: insumo.nome,
-      tipo: insumo.tipo,
-      quantidade: Number((insumo.qtd_base_por_1000L * fator).toFixed(3)),
-      unidade: insumo.unidade,
-      custo_unitario: insumo.preco_unitario_kg || null,
-      custo_total: insumo.preco_unitario_kg 
-        ? Number((insumo.preco_unitario_kg * insumo.qtd_base_por_1000L * fator).toFixed(2))
-        : null
+    return (formulacao.itens || []).map(item => ({
+      nome_item: item.nome_item,
+      tipo: item.tipo,
+      quantidade_calculada: Number(((item.quantidade_por_1000l || 0) * fator).toFixed(3)),
+      unidade: item.unidade,
+      custo_unitario: null as number | null,
+      custo_total: null as number | null
     }))
   }
 
-  const gerarCodigoOrdem = () => {
+  const gerarNumeroOrdem = () => {
     const data = new Date()
     const ano = data.getFullYear().toString().slice(-2)
     const mes = String(data.getMonth() + 1).padStart(2, '0')
@@ -141,7 +169,7 @@ export default function OrdensPage() {
   }
 
   const criarOrdem = async () => {
-    if (!novaOrdem.formulacao_id) {
+    if (!novaOrdem.formulacao_id || !industriaId) {
       toast.error("Selecione uma formulação")
       return
     }
@@ -153,16 +181,15 @@ export default function OrdensPage() {
     }
 
     setSavingOrdem(true)
-    const supabase = createClient()
 
     try {
-      const insumosCalculados = calcularInsumos(
+      const itensCalculados = calcularItens(
         formulacao, 
-        novaOrdem.volume_litros, 
+        novaOrdem.volume_programado, 
         novaOrdem.percentual_producao
       )
 
-      const custoEstimado = insumosCalculados.reduce(
+      const custoEstimado = itensCalculados.reduce(
         (acc, i) => acc + (i.custo_total || 0), 
         0
       )
@@ -170,47 +197,52 @@ export default function OrdensPage() {
       const { data: ordemData, error: ordemError } = await supabase
         .from("ordens_producao")
         .insert({
-          empresa_id: activeSupabaseId,
-          codigo: gerarCodigoOrdem(),
+          industria_id: industriaId,
+          numero_ordem: gerarNumeroOrdem(),
           formulacao_id: novaOrdem.formulacao_id,
-          produto: formulacao.produto,
-          volume_litros: novaOrdem.volume_litros,
+          produto_nome: formulacao.nome,
+          volume_programado: novaOrdem.volume_programado,
           percentual_producao: novaOrdem.percentual_producao,
           prioridade: novaOrdem.prioridade,
           data_programada: novaOrdem.data_programada || null,
           operador: novaOrdem.operador || null,
-          observacao: novaOrdem.observacao || null,
+          observacoes: novaOrdem.observacoes || null,
           custo_estimado: custoEstimado > 0 ? custoEstimado : null,
-          status: "Aguardando"
+          status: "pendente" as StatusOrdem
         })
         .select()
         .single()
 
       if (ordemError) throw ordemError
 
-      if (insumosCalculados.length > 0) {
-        const { error: insumosError } = await supabase
-          .from("ordem_insumos")
+      if (itensCalculados.length > 0) {
+        const { error: itensError } = await supabase
+          .from("ordem_itens")
           .insert(
-            insumosCalculados.map(i => ({
+            itensCalculados.map(i => ({
               ordem_id: ordemData.id,
-              ...i
+              nome_item: i.nome_item,
+              tipo: i.tipo,
+              quantidade_calculada: i.quantidade_calculada,
+              unidade: i.unidade,
+              custo_unitario: i.custo_unitario,
+              custo_total: i.custo_total
             }))
           )
 
-        if (insumosError) throw insumosError
+        if (itensError) throw itensError
       }
 
       toast.success("Ordem de produção criada com sucesso!")
       setNovaOrdemDialogOpen(false)
       setNovaOrdem({
         formulacao_id: "",
-        volume_litros: 1000,
+        volume_programado: 1000,
         percentual_producao: 100,
-        prioridade: "Normal",
+        prioridade: "normal",
         data_programada: "",
         operador: "",
-        observacao: ""
+        observacoes: ""
       })
       carregarDados()
     } catch (error) {
@@ -221,14 +253,12 @@ export default function OrdensPage() {
     }
   }
 
-  const atualizarStatus = async (ordemId: string, novoStatus: OrdemProducao["status"]) => {
-    const supabase = createClient()
-    
+  const atualizarStatus = async (ordemId: string, novoStatus: StatusOrdem) => {
     const updates: Partial<OrdemProducao> = { status: novoStatus }
     
-    if (novoStatus === "Em Produção") {
+    if (novoStatus === "em_producao") {
       updates.data_inicio = new Date().toISOString()
-    } else if (novoStatus === "Concluído") {
+    } else if (novoStatus === "concluida") {
       updates.data_conclusao = new Date().toISOString()
     }
 
@@ -242,14 +272,13 @@ export default function OrdensPage() {
       return
     }
 
-    toast.success(`Status atualizado para: ${novoStatus}`)
+    toast.success(`Status atualizado para: ${formatarStatus(novoStatus)}`)
     carregarDados()
   }
 
   const excluirOrdem = async (ordemId: string) => {
     if (!confirm("Tem certeza que deseja excluir esta ordem?")) return
 
-    const supabase = createClient()
     const { error } = await supabase.from("ordens_producao").delete().eq("id", ordemId)
 
     if (error) {
@@ -261,42 +290,64 @@ export default function OrdensPage() {
     carregarDados()
   }
 
-  const insumosPreview = useMemo(() => {
+  const itensPreview = useMemo(() => {
     if (!novaOrdem.formulacao_id) return []
     const formulacao = formulacoes.find(f => f.id === novaOrdem.formulacao_id)
     if (!formulacao) return []
-    return calcularInsumos(formulacao, novaOrdem.volume_litros, novaOrdem.percentual_producao)
-  }, [novaOrdem.formulacao_id, novaOrdem.volume_litros, novaOrdem.percentual_producao, formulacoes])
+    return calcularItens(formulacao, novaOrdem.volume_programado, novaOrdem.percentual_producao)
+  }, [novaOrdem.formulacao_id, novaOrdem.volume_programado, novaOrdem.percentual_producao, formulacoes])
 
   const ordensFiltradas = ordens.filter(o => {
-    const matchSearch = o.produto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       o.codigo.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchSearch = o.produto_nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                       o.numero_ordem.toLowerCase().includes(searchTerm.toLowerCase())
     const matchStatus = statusFilter === "todos" || o.status === statusFilter
     return matchSearch && matchStatus
   })
 
   const stats = {
-    aguardando: ordens.filter(o => o.status === "Aguardando").length,
-    emProducao: ordens.filter(o => o.status === "Em Produção").length,
-    concluido: ordens.filter(o => o.status === "Concluído").length
+    pendente: ordens.filter(o => o.status === "pendente").length,
+    emProducao: ordens.filter(o => o.status === "em_producao").length,
+    concluida: ordens.filter(o => o.status === "concluida").length
   }
 
-  const getStatusBadgeVariant = (status: string) => {
+  const formatarStatus = (status: StatusOrdem): string => {
+    const labels: Record<StatusOrdem, string> = {
+      pendente: "Pendente",
+      em_producao: "Em Produção",
+      pausada: "Pausada",
+      concluida: "Concluída",
+      cancelada: "Cancelada"
+    }
+    return labels[status] || status
+  }
+
+  const formatarPrioridade = (prioridade: PrioridadeOrdem): string => {
+    const labels: Record<PrioridadeOrdem, string> = {
+      baixa: "Baixa",
+      normal: "Normal",
+      alta: "Alta",
+      urgente: "Urgente"
+    }
+    return labels[prioridade] || prioridade
+  }
+
+  const getStatusBadgeVariant = (status: StatusOrdem) => {
     switch (status) {
-      case "Aguardando": return "secondary"
-      case "Em Produção": return "default"
-      case "Concluído": return "outline"
-      case "Cancelado": return "destructive"
+      case "pendente": return "secondary"
+      case "em_producao": return "default"
+      case "concluida": return "outline"
+      case "pausada": return "secondary"
+      case "cancelada": return "destructive"
       default: return "secondary"
     }
   }
 
-  const getPrioridadeBadgeClass = (prioridade: string) => {
+  const getPrioridadeBadgeClass = (prioridade: PrioridadeOrdem) => {
     switch (prioridade) {
-      case "Urgente": return "bg-red-500/20 text-red-600 border-red-500/50"
-      case "Alta": return "bg-orange-500/20 text-orange-600 border-orange-500/50"
-      case "Normal": return "bg-blue-500/20 text-blue-600 border-blue-500/50"
-      case "Baixa": return "bg-gray-500/20 text-gray-600 border-gray-500/50"
+      case "urgente": return "bg-red-500/20 text-red-600 border-red-500/50"
+      case "alta": return "bg-orange-500/20 text-orange-600 border-orange-500/50"
+      case "normal": return "bg-blue-500/20 text-blue-600 border-blue-500/50"
+      case "baixa": return "bg-gray-500/20 text-gray-600 border-gray-500/50"
       default: return ""
     }
   }
@@ -337,7 +388,7 @@ export default function OrdensPage() {
                         </SelectTrigger>
                         <SelectContent>
                           {formulacoes.map(f => (
-                            <SelectItem key={f.id} value={f.id}>{f.produto}</SelectItem>
+                            <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -347,16 +398,16 @@ export default function OrdensPage() {
                       <Label>Prioridade</Label>
                       <Select
                         value={novaOrdem.prioridade}
-                        onValueChange={(v) => setNovaOrdem(prev => ({ ...prev, prioridade: v as "Baixa" | "Normal" | "Alta" | "Urgente" }))}
+                        onValueChange={(v) => setNovaOrdem(prev => ({ ...prev, prioridade: v as PrioridadeOrdem }))}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Baixa">Baixa</SelectItem>
-                          <SelectItem value="Normal">Normal</SelectItem>
-                          <SelectItem value="Alta">Alta</SelectItem>
-                          <SelectItem value="Urgente">Urgente</SelectItem>
+                          <SelectItem value="baixa">Baixa</SelectItem>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="alta">Alta</SelectItem>
+                          <SelectItem value="urgente">Urgente</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -367,8 +418,8 @@ export default function OrdensPage() {
                       <Label>Volume (Litros) *</Label>
                       <Input
                         type="number"
-                        value={novaOrdem.volume_litros}
-                        onChange={(e) => setNovaOrdem(prev => ({ ...prev, volume_litros: Number(e.target.value) }))}
+                        value={novaOrdem.volume_programado}
+                        onChange={(e) => setNovaOrdem(prev => ({ ...prev, volume_programado: Number(e.target.value) }))}
                         min={1}
                       />
                     </div>
@@ -407,20 +458,20 @@ export default function OrdensPage() {
                     <div className="space-y-2">
                       <Label>Observações</Label>
                       <Textarea
-                        value={novaOrdem.observacao}
-                        onChange={(e) => setNovaOrdem(prev => ({ ...prev, observacao: e.target.value }))}
+                        value={novaOrdem.observacoes}
+                        onChange={(e) => setNovaOrdem(prev => ({ ...prev, observacoes: e.target.value }))}
                         placeholder="Observações adicionais"
                         rows={2}
                       />
                     </div>
                   </div>
 
-                  {insumosPreview.length > 0 && (
+                  {itensPreview.length > 0 && (
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-sm flex items-center gap-2">
                           <Calculator className="h-4 w-4" />
-                          Insumos Calculados para {novaOrdem.volume_litros}L
+                          Insumos Calculados para {novaOrdem.volume_programado.toLocaleString()}L
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -430,28 +481,18 @@ export default function OrdensPage() {
                               <TableHead>Insumo</TableHead>
                               <TableHead>Tipo</TableHead>
                               <TableHead className="text-right">Quantidade</TableHead>
-                              <TableHead className="text-right">Custo Est.</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {insumosPreview.map((insumo, idx) => (
+                            {itensPreview.map((item, idx) => (
                               <TableRow key={idx}>
-                                <TableCell className="font-medium">{insumo.nome}</TableCell>
-                                <TableCell className="capitalize">{insumo.tipo}</TableCell>
+                                <TableCell className="font-medium">{item.nome_item}</TableCell>
+                                <TableCell className="capitalize">{item.tipo}</TableCell>
                                 <TableCell className="text-right font-mono">
-                                  {insumo.quantidade.toFixed(3)} {insumo.unidade}
-                                </TableCell>
-                                <TableCell className="text-right font-mono">
-                                  {insumo.custo_total ? `R$ ${insumo.custo_total.toFixed(2)}` : "-"}
+                                  {item.quantidade_calculada.toFixed(3)} {item.unidade}
                                 </TableCell>
                               </TableRow>
                             ))}
-                            <TableRow className="bg-muted/50">
-                              <TableCell colSpan={3} className="font-medium">Total Estimado</TableCell>
-                              <TableCell className="text-right font-mono font-medium">
-                                R$ {insumosPreview.reduce((acc, i) => acc + (i.custo_total || 0), 0).toFixed(2)}
-                              </TableCell>
-                            </TableRow>
                           </TableBody>
                         </Table>
                       </CardContent>
@@ -483,8 +524,8 @@ export default function OrdensPage() {
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>Aguardando</CardDescription>
-                <CardTitle className="text-2xl text-yellow-600">{stats.aguardando}</CardTitle>
+                <CardDescription>Pendentes</CardDescription>
+                <CardTitle className="text-2xl text-yellow-600">{stats.pendente}</CardTitle>
               </CardHeader>
             </Card>
             <Card>
@@ -496,7 +537,7 @@ export default function OrdensPage() {
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>Concluídas</CardDescription>
-                <CardTitle className="text-2xl text-green-600">{stats.concluido}</CardTitle>
+                <CardTitle className="text-2xl text-green-600">{stats.concluida}</CardTitle>
               </CardHeader>
             </Card>
           </div>
@@ -517,10 +558,10 @@ export default function OrdensPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
-                <SelectItem value="Aguardando">Aguardando</SelectItem>
-                <SelectItem value="Em Produção">Em Produção</SelectItem>
-                <SelectItem value="Concluído">Concluído</SelectItem>
-                <SelectItem value="Cancelado">Cancelado</SelectItem>
+                <SelectItem value="pendente">Pendente</SelectItem>
+                <SelectItem value="em_producao">Em Produção</SelectItem>
+                <SelectItem value="concluida">Concluída</SelectItem>
+                <SelectItem value="cancelada">Cancelada</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -567,24 +608,23 @@ export default function OrdensPage() {
                     <TableHead>Status</TableHead>
                     <TableHead>Prioridade</TableHead>
                     <TableHead>Data Prog.</TableHead>
-                    <TableHead>Custo Est.</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {ordensFiltradas.map((ordem) => (
                     <TableRow key={ordem.id}>
-                      <TableCell className="font-mono font-medium">{ordem.codigo}</TableCell>
-                      <TableCell>{ordem.produto}</TableCell>
-                      <TableCell className="font-mono">{ordem.volume_litros.toLocaleString()}L</TableCell>
+                      <TableCell className="font-mono font-medium">{ordem.numero_ordem}</TableCell>
+                      <TableCell>{ordem.produto_nome}</TableCell>
+                      <TableCell className="font-mono">{ordem.volume_programado.toLocaleString()}L</TableCell>
                       <TableCell>
                         <Badge variant={getStatusBadgeVariant(ordem.status)}>
-                          {ordem.status}
+                          {formatarStatus(ordem.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={getPrioridadeBadgeClass(ordem.prioridade)}>
-                          {ordem.prioridade}
+                          {formatarPrioridade(ordem.prioridade)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -592,9 +632,6 @@ export default function OrdensPage() {
                           ? new Date(ordem.data_programada).toLocaleDateString("pt-BR")
                           : "-"
                         }
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {ordem.custo_estimado ? `R$ ${ordem.custo_estimado.toFixed(2)}` : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -608,27 +645,47 @@ export default function OrdensPage() {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {ordem.status === "Aguardando" && (
+                          {ordem.status === "pendente" && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => atualizarStatus(ordem.id, "Em Produção")}
+                              onClick={() => atualizarStatus(ordem.id, "em_producao")}
                               title="Iniciar Produção"
                             >
                               <Play className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
-                          {ordem.status === "Em Produção" && (
+                          {ordem.status === "em_producao" && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => atualizarStatus(ordem.id, "pausada")}
+                                title="Pausar"
+                              >
+                                <Pause className="h-4 w-4 text-yellow-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => atualizarStatus(ordem.id, "concluida")}
+                                title="Concluir"
+                              >
+                                <CheckCircle className="h-4 w-4 text-blue-600" />
+                              </Button>
+                            </>
+                          )}
+                          {ordem.status === "pausada" && (
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => atualizarStatus(ordem.id, "Concluído")}
-                              title="Concluir"
+                              onClick={() => atualizarStatus(ordem.id, "em_producao")}
+                              title="Retomar"
                             >
-                              <CheckCircle className="h-4 w-4 text-blue-600" />
+                              <Play className="h-4 w-4 text-green-600" />
                             </Button>
                           )}
-                          {ordem.status === "Aguardando" && (
+                          {(ordem.status === "pendente" || ordem.status === "cancelada") && (
                             <Button
                               variant="ghost"
                               size="icon"
@@ -653,7 +710,7 @@ export default function OrdensPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <ClipboardList className="h-5 w-5 text-primary" />
-                Ordem {selectedOrdem?.codigo}
+                Ordem {selectedOrdem?.numero_ordem}
               </DialogTitle>
               <DialogDescription>
                 Detalhes da ordem de produção
@@ -661,44 +718,31 @@ export default function OrdensPage() {
             </DialogHeader>
 
             {selectedOrdem && (
-              <Tabs defaultValue="insumos" className="w-full">
+              <Tabs defaultValue="itens" className="w-full">
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="insumos">Insumos</TabsTrigger>
+                  <TabsTrigger value="itens">Insumos</TabsTrigger>
                   <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="insumos" className="space-y-4">
+                <TabsContent value="itens" className="space-y-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Insumo</TableHead>
                         <TableHead>Tipo</TableHead>
                         <TableHead className="text-right">Quantidade</TableHead>
-                        <TableHead className="text-right">Custo</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedOrdem.insumos.map((insumo) => (
-                        <TableRow key={insumo.id}>
-                          <TableCell className="font-medium">{insumo.nome}</TableCell>
-                          <TableCell className="capitalize">{insumo.tipo}</TableCell>
+                      {selectedOrdem.itens.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.nome_item}</TableCell>
+                          <TableCell className="capitalize">{item.tipo || "-"}</TableCell>
                           <TableCell className="text-right font-mono">
-                            {insumo.quantidade.toFixed(3)} {insumo.unidade}
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {insumo.custo_total ? `R$ ${insumo.custo_total.toFixed(2)}` : "-"}
+                            {item.quantidade_calculada.toFixed(3)} {item.unidade}
                           </TableCell>
                         </TableRow>
                       ))}
-                      <TableRow className="bg-muted/50">
-                        <TableCell colSpan={3} className="font-medium">Total</TableCell>
-                        <TableCell className="text-right font-mono font-medium">
-                          {selectedOrdem.custo_estimado 
-                            ? `R$ ${selectedOrdem.custo_estimado.toFixed(2)}`
-                            : "-"
-                          }
-                        </TableCell>
-                      </TableRow>
                     </TableBody>
                   </Table>
                 </TabsContent>
@@ -707,19 +751,19 @@ export default function OrdensPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-muted-foreground">Produto</Label>
-                      <p className="font-medium">{selectedOrdem.produto}</p>
+                      <p className="font-medium">{selectedOrdem.produto_nome}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Volume</Label>
-                      <p className="font-medium font-mono">{selectedOrdem.volume_litros.toLocaleString()}L</p>
+                      <p className="font-medium font-mono">{selectedOrdem.volume_programado.toLocaleString()}L</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Status</Label>
-                      <p><Badge variant={getStatusBadgeVariant(selectedOrdem.status)}>{selectedOrdem.status}</Badge></p>
+                      <p><Badge variant={getStatusBadgeVariant(selectedOrdem.status)}>{formatarStatus(selectedOrdem.status)}</Badge></p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Prioridade</Label>
-                      <p><Badge variant="outline" className={getPrioridadeBadgeClass(selectedOrdem.prioridade)}>{selectedOrdem.prioridade}</Badge></p>
+                      <p><Badge variant="outline" className={getPrioridadeBadgeClass(selectedOrdem.prioridade)}>{formatarPrioridade(selectedOrdem.prioridade)}</Badge></p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Operador</Label>
@@ -751,10 +795,10 @@ export default function OrdensPage() {
                       </div>
                     )}
                   </div>
-                  {selectedOrdem.observacao && (
+                  {selectedOrdem.observacoes && (
                     <div>
                       <Label className="text-muted-foreground">Observações</Label>
-                      <p className="text-sm mt-1">{selectedOrdem.observacao}</p>
+                      <p className="text-sm mt-1">{selectedOrdem.observacoes}</p>
                     </div>
                   )}
                 </TabsContent>
