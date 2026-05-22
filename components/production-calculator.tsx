@@ -60,7 +60,11 @@ export function ProductionCalculator() {
 
   // Carregar formulações do Supabase
   const loadFormulacoes = useCallback(async () => {
-    if (!activeSupabaseId) return
+    if (!activeSupabaseId) {
+      setIsLoading(false)
+      setFormulacoesDB([])
+      return
+    }
     
     setIsLoading(true)
     try {
