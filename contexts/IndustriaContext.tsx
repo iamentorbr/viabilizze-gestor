@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import type { Industria } from '@/lib/types'
 
 // ─── Tipos do contexto ────────────────────────────────────────────────────
@@ -36,6 +36,13 @@ export function IndustriaProvider({ children }: { children: ReactNode }) {
   const carregarIndustrias = useCallback(async () => {
     setLoading(true)
     setError(null)
+
+    const supabase = getSupabase()
+    if (!supabase) {
+      setError('Supabase não configurado')
+      setLoading(false)
+      return
+    }
 
     try {
       const { data, error: supaErr } = await supabase
@@ -91,6 +98,9 @@ export function IndustriaProvider({ children }: { children: ReactNode }) {
   // ── Criar nova indústria ──────────────────────────────────────────────
   const criarIndustria = useCallback(
     async (dados: { nome: string; responsavel?: string; cnpj?: string }) => {
+      const supabase = getSupabase()
+      if (!supabase) return null
+
       try {
         const { data, error: supaErr } = await supabase
           .from('industrias')

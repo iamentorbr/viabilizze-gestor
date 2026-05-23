@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 import type { Formulacao, Insumo } from '@/lib/types'
 
 // ─── Hook: lista de formulações com insumos ───────────────────────────────
@@ -18,6 +18,13 @@ export function useFormulacoes(industriaId: string | null | undefined) {
 
     setLoading(true)
     setError(null)
+
+    const supabase = getSupabase()
+    if (!supabase) {
+      setError('Supabase não configurado')
+      setLoading(false)
+      return
+    }
 
     try {
       const { data, error: supaErr } = await supabase
@@ -69,6 +76,13 @@ export function useFormulacao(formulacaoId: string | null | undefined) {
       return
     }
 
+    const supabase = getSupabase()
+    if (!supabase) {
+      setFormulacao(null)
+      setInsumos([])
+      return
+    }
+
     setLoading(true)
 
     supabase
@@ -97,6 +111,9 @@ export async function salvarFormulacao(
   formulacao: Omit<Formulacao, 'id' | 'criado_em' | 'atualizado_em' | 'insumos'>,
   insumos: Omit<Insumo, 'id' | 'formulacao_id' | 'criado_em' | 'atualizado_em'>[]
 ): Promise<{ formulacaoId: string | null; erro: string | null }> {
+  const supabase = getSupabase()
+  if (!supabase) return { formulacaoId: null, erro: 'Supabase não configurado' }
+
   try {
     const { data: fData, error: fErr } = await supabase
       .from('formulacoes')
@@ -131,6 +148,9 @@ export async function salvarFormulacao(
 }
 
 export async function excluirFormulacao(id: string): Promise<boolean> {
+  const supabase = getSupabase()
+  if (!supabase) return false
+
   const { error } = await supabase
     .from('formulacoes')
     .update({ ativo: false })
@@ -143,6 +163,9 @@ export async function duplicarFormulacao(
   formulacaoId: string,
   industriaId: string
 ): Promise<string | null> {
+  const supabase = getSupabase()
+  if (!supabase) return null
+
   // Buscar original com insumos
   const { data, error } = await supabase
     .from('formulacoes')
