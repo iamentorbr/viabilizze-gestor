@@ -1,21 +1,25 @@
 'use client'
 
 import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  type ReactNode,
+  createContext, useContext, useState, useEffect, useCallback, type ReactNode,
 } from 'react'
 import { supabase } from '@/lib/supabase'
-import type { Industria } from '@/lib/types'
+
+export interface Industria {
+  id: string
+  nome: string
+  cnpj?: string | null
+  responsavel?: string | null
+  ativo: boolean
+  criado_em: string
+  atualizado_em: string
+}
 
 interface IndustriaContextType {
   industrias: Industria[]
   industriaAtiva: Industria | null
   setIndustriaAtiva: (industria: Industria) => void
-  criarIndustria: (dados: { nome: string; responsavel?: string; cnpj?: string }) => Promise<Industria | null>
+  criarIndustria: (dados: { nome: string; responsavel?: string }) => Promise<Industria | null>
   recarregar: () => Promise<void>
   loading: boolean
   error: string | null
@@ -33,103 +37,50 @@ export function IndustriaProvider({ children }: { children: ReactNode }) {
   const carregarIndustrias = useCallback(async () => {
     setLoading(true)
     setError(null)
-
     try {
       const { data, error: supaErr } = await supabase
         .from('industrias')
         .select('*')
         .eq('ativo', true)
         .order('nome', { ascending: true })
-
       if (supaErr) throw supaErr
-
       const lista = (data ?? []) as Industria[]
       setIndustrias(lista)
-
-      if (lista.length === 0) {
-        setIndustriaAtivaState(null)
-        return
-      }
-
-      // Recuperar ID salvo no localStorage
-      const idSalvo =
-        typeof window !== 'undefined'
-          ? localStorage.getItem(STORAGE_KEY)
-          : null
-
-      // CRÍTICO: só usar o ID salvo se a indústria ainda existe E está ativa
-      const encontrada = idSalvo
-        ? lista.find(i => i.id === idSalvo) ?? null
-        : null
-
-      // Se o ID salvo não corresponde a nenhuma indústria ativa, usar a primeira
+      if (lista.length === 0) { setIndustriaAtivaState(null); return }
+      const idSalvo = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+      const encontrada = idSalvo ? lista.find(i => i.id === idSalvo) ?? null : null
       const ativa = encontrada ?? lista[0]
       setIndustriaAtivaState(ativa)
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, ativa.id)
-      }
+      if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, ativa.id)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao carregar indústrias'
-      setError(msg)
-      console.error('[IndustriaContext] Erro:', err)
+      setError(err instanceof Error ? err.message : 'Erro ao carregar indústrias')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => {
-    carregarIndustrias()
-  }, [carregarIndustrias])
+  useEffect(() => { carregarIndustrias() }, [carregarIndustrias])
 
   const setIndustriaAtiva = useCallback((industria: Industria) => {
     setIndustriaAtivaState(industria)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, industria.id)
-    }
+    if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, industria.id)
   }, [])
 
-  const criarIndustria = useCallback(
-    async (dados: { nome: string; responsavel?: string; cnpj?: string }) => {
-      try {
-        const { data, error: supaErr } = await supabase
-          .from('industrias')
-          .insert({
-            nome: dados.nome,
-            responsavel: dados.responsavel ?? null,
-            cnpj: dados.cnpj ?? null,
-            ativo: true,
-          })
-          .select()
-          .single()
-
-        if (supaErr) throw supaErr
-
-        const nova = data as Industria
-        setIndustrias(prev =>
-          [...prev, nova].sort((a, b) => a.nome.localeCompare(b.nome))
-        )
-        return nova
-      } catch (err: unknown) {
-        console.error('[IndustriaContext] Erro ao criar:', err)
-        return null
-      }
-    },
-    []
-  )
+  const criarIndustria = useCallback(async (dados: { nome: string; responsavel?: string }) => {
+    try {
+      const { data, error: supaErr } = await supabase
+        .from('industrias')
+        .insert({ nome: dados.nome, responsavel: dados.responsavel ?? null, ativo: true })
+        .select().single()
+      if (supaErr) throw supaErr
+      const nova = data as Industria
+      setIndustrias(prev => [...prev, nova].sort((a, b) => a.nome.localeCompare(b.nome)))
+      return nova
+    } catch (err) { console.error('[criarIndustria]', err); return null }
+  }, [])
 
   return (
-    <IndustriaContext.Provider
-      value={{
-        industrias,
-        industriaAtiva,
-        setIndustriaAtiva,
-        criarIndustria,
-        recarregar: carregarIndustrias,
-        loading,
-        error,
-      }}
-    >
+    <IndustriaContext.Provider value={{ industrias, industriaAtiva, setIndustriaAtiva, criarIndustria, recarregar: carregarIndustrias, loading, error }}>
       {children}
     </IndustriaContext.Provider>
   )
@@ -137,8 +88,6 @@ export function IndustriaProvider({ children }: { children: ReactNode }) {
 
 export function useIndustria() {
   const ctx = useContext(IndustriaContext)
-  if (!ctx) {
-    throw new Error('useIndustria deve ser usado dentro de <IndustriaProvider>')
-  }
+  if (!ctx) throw new Error('useIndustria deve ser usado dentro de IndustriaProvider')
   return ctx
 }
