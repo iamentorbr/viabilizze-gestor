@@ -3,7 +3,7 @@
 import {
   createContext, useContext, useState, useEffect, useCallback, type ReactNode,
 } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 export interface Industria {
   id: string
@@ -38,7 +38,7 @@ export function IndustriaProvider({ children }: { children: ReactNode }) {
     setLoading(true)
     setError(null)
     try {
-      const { data, error: supaErr } = await supabase
+      const { data, error: supaErr } = await getSupabase()
         .from('industrias')
         .select('*')
         .eq('ativo', true)
@@ -68,7 +68,7 @@ export function IndustriaProvider({ children }: { children: ReactNode }) {
 
   const criarIndustria = useCallback(async (dados: { nome: string; responsavel?: string }) => {
     try {
-      const { data, error: supaErr } = await supabase
+      const { data, error: supaErr } = await getSupabase()
         .from('industrias')
         .insert({ nome: dados.nome, responsavel: dados.responsavel ?? null, ativo: true })
         .select().single()
